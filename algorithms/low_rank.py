@@ -68,8 +68,6 @@ def fit_model(data_matrix, K, num_iter=NUM_ITER, rotation_trick=True):
 
         X = data_matrix.sample_latent_values(pred, ssq_N)
 
-        misc.print_dot(it+1, num_iter)
-
         if time.time() - t0 > 3600.:   # 1 hour
             break
 

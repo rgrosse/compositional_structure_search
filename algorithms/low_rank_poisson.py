@@ -334,6 +334,8 @@ def fit_model(data_matrix, K=K_INIT, num_iter=NUM_ITER, name=None):
     N, D = data_matrix.m, data_matrix.n
     X, state = init_state(data_matrix, K)
 
+    pbar = misc.pbar(num_iter)
+
     t0 = time.time()
     for it in range(num_iter):
         sample_U_V(state, X, data_matrix.observations.mask)
@@ -359,10 +361,13 @@ def fit_model(data_matrix, K=K_INIT, num_iter=NUM_ITER, name=None):
             print 'ssq_N =', state.ssq_N
             print 'X.var() =', X.var()
 
-        misc.print_dot(it+1, num_iter)
+        #misc.print_dot(it+1, num_iter)
+        pbar.update(it)
 
         if time.time() - t0 > 3600.:   # 1 hour
             break
+
+    pbar.finish()
 
     return state, X
 

@@ -19,6 +19,7 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix):
     predictive_info = predictive_distributions.remove_gsm(predictive_info_orig)
 
     result = np.zeros(test_data_matrix.m)
+    pbar = misc.pbar(test_data_matrix.m)
     for i, row in enumerate(test_data_matrix.row_ids):
         idxs = np.where(test_data_matrix.observations.mask[i, :])[0]
 
@@ -49,7 +50,8 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix):
             X = X[nax, :]
             result[i] = ais_gsm.compute_likelihood(X, predictive_info_orig, [reps], np.array([result[i]]))[0]
 
-        misc.print_dot(i+1, test_data_matrix.m)
+        pbar.update(i)
+    pbar.finish()
 
 
     return result
@@ -70,7 +72,8 @@ def no_structure_col_loglik(train_data, col_test_data):
     
 def evaluate_model(train_data, root, row_test_data, col_test_data, label='', avg_col_mean=True,
                    init_row_loglik=None, init_col_loglik=None, num_steps=2000):
-    
+
+    print 'Scoring row predictive likelihood...'
     row_loglik_all = score_row_predictive_variational(train_data, root, row_test_data)
     if avg_col_mean:
         if init_row_loglik is None:
@@ -78,6 +81,7 @@ def evaluate_model(train_data, root, row_test_data, col_test_data, label='', avg
         row_loglik_all = np.logaddexp(row_loglik_all + np.log(0.99),
                                       init_row_loglik + np.log(0.01))
 
+    print 'Scoring column predictive likelihood...'
     col_loglik_all = score_col_predictive_variational(train_data, root, col_test_data)
     if avg_col_mean:
         if init_col_loglik is None:

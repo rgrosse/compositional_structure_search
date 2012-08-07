@@ -1,11 +1,10 @@
 import numpy as np
 nax = np.newaxis
-import utils
 
 from algorithms import chains, dumb_samplers
 import initialization
 import models
-
+from utils import misc
 
 
 
@@ -142,7 +141,7 @@ class GaussianNode(LeafNode):
         return GaussianNode(self._value.copy(), self.variance_type, sigma_sq)
 
     def __getitem__(self, slc):
-        rslc, cslc = utils.extract_slices(slc)
+        rslc, cslc = misc.extract_slices(slc)
         if self.variance_type == 'scalar':
             sigma_sq = self.sigma_sq
         elif self.variance_type == 'row':
@@ -278,7 +277,7 @@ class GSMNode(Node):
             return GSMNode(self._value.copy(), self.scale_node.copy(), self.bias_type, self.bias.copy())
 
     def __getitem__(self, slc):
-        rslc, cslc = utils.extract_slices(slc)
+        rslc, cslc = misc.extract_slices(slc)
         if self.bias_type == 'row':
             return GSMNode(self._value[slc].copy(), self.scale_node[slc].copy(), self.bias_type, self.bias[rslc].copy())
         elif self.bias_type == 'col':
@@ -378,7 +377,7 @@ class ProductNode(Node):
         return 'Product(%s)' % children_str
 
     def value(self):
-        return utils.mult([child.value() for child in self.children])
+        return misc.mult([child.value() for child in self.children])
 
     def copy(self):
         children = [child.copy() for child in self.children]
@@ -388,7 +387,7 @@ class ProductNode(Node):
 
     def __getitem__(self, slc):
         assert len(self.children) == 2
-        rslc, cslc = utils.extract_slices(slc)
+        rslc, cslc = misc.extract_slices(slc)
         return ProductNode([self.children[0][rslc, :], self.children[1][:, cslc]])
 
 

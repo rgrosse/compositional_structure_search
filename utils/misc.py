@@ -3,6 +3,7 @@ from PIL import Image
 import itertools
 import numpy as np
 nax = np.newaxis
+import progressbar
 import scipy.linalg, scipy.integrate
 import sys
 import termcolor
@@ -510,3 +511,7 @@ def print_integers_colored(a):
         color = COLORS[ai % len(COLORS)]
         print termcolor.colored(str(ai), color, attrs=['bold']),
     print ']'
+
+def pbar(maxval):
+    widgets = [progressbar.Percentage(), ' ', progressbar.Bar(), progressbar.ETA()]
+    return progressbar.ProgressBar(widgets=widgets, maxval=maxval).start()

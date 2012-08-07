@@ -2,6 +2,7 @@ import numpy as np
 nax = np.newaxis
 import scipy.optimize
 
+import grammar
 import models
 import slice_sampling
 import sparse_coding
@@ -281,6 +282,13 @@ def list_samplers(model, maximize=False):
 
 def sweep(data_matrix, root, num_iter=100, maximize=False):
     samplers = get_samplers(data_matrix, root, maximize)
+
+    if num_iter > 1:
+        print 'Dumb Gibbs sampling on %s...' % grammar.pretty_print(root.structure())
+        pbar = misc.pbar(num_iter)
+    else:
+        pbar = None
+        
     for it in range(num_iter):
         for sampler in samplers:
             if sampler.preserves_root_value():
@@ -289,5 +297,8 @@ def sweep(data_matrix, root, num_iter=100, maximize=False):
             if sampler.preserves_root_value():
                 assert np.allclose(old, root.value())
 
-        misc.print_dot(it+1, num_iter)            
+        if pbar is not None:
+            pbar.update(it)
+    if pbar is not None:
+        pbar.finish()
         

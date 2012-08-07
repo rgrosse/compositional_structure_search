@@ -142,6 +142,8 @@ def fit_model(data_matrix, num_iter=NUM_ITER):
     resid = np.zeros((N, D))
     diff = np.zeros((N_orig-1, D))
 
+    pbar = misc.pbar(num_iter)
+
     t0 = time.time()
     for it in range(num_iter):
         lam_N = np.zeros(N_orig)
@@ -158,10 +160,11 @@ def fit_model(data_matrix, num_iter=NUM_ITER):
         X = data_matrix.sample_latent_values(states[row_ids, :], sigma_sq_N)
         X_full[row_ids, :] = X
 
-        misc.print_dot(it+1, NUM_ITER)
-
         if time.time() - t0 > 3600.:   # 1 hour
             break
+
+        pbar.update(it)
+    pbar.finish()
 
     return states, sigma_sq_D, sigma_sq_N
 

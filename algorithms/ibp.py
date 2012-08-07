@@ -554,21 +554,19 @@ def fit_model(data_matrix, num_iter=NUM_ITER):
     data = data_matrix.observations
     state = sequential_init(model, data, fixed_variance)
 
-    t0 = t0_inner = time.time()
+    pbar = misc.pbar(num_iter)
+
+    t0 = time.time()
     for it in range(num_iter):
         gibbs_sweep(model, data, state, True, True, fixed_variance)
 
         pred = np.dot(state.Z, state.A)
         state.X = data.sample_latent_values(pred, state.sigma_sq_n)
         
-        misc.print_dot(it + 1, 200)
-
-        print state.Z.shape[1], time.time() - t0_inner
-        t0_inner = time.time()
-
-        #if time.time() - t0 > 3600.:  # 1 hour
-        print 'time.time() - t0', time.time() - t0
         if time.time() - t0 > TIME_LIMIT:
             break
+
+        pbar.update(it)
+    pbar.finish()
 
     return state

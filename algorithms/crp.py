@@ -371,17 +371,19 @@ def fit_model(data_matrix, isotropic_w=True, isotropic_b=True, num_iter=NUM_ITER
         else:
             state.sigma_sq_w = np.ones(D)
 
+    pbar = misc.pbar(num_iter)
+
     t0 = time.time()
     for it in range(num_iter):
         pred = state.centers[state.assignments, :]
         state.X = data_matrix.sample_latent_values(pred, state.sigma_sq_w)
         gibbs_sweep_collapsed(model, data, state, fixed_variance)
-        misc.print_dot(it + 1, NUM_ITER)
-
-        print state.centers.shape[0]
 
         if time.time() - t0 > 3600.:   # 1 hour
             break
+
+        pbar.update(it)
+    pbar.finish()
 
     # sample the centers
     cache = CollapsedCRPCache.from_state(model, data, state)

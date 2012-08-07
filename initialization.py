@@ -1,7 +1,7 @@
 import numpy as np
 nax = np.newaxis
 
-import algorithms
+from algorithms import low_rank_poisson, crp, ibp, sparse_coding, chains
 import grammar
 import observations
 import recursive
@@ -12,7 +12,7 @@ debugger = None
 
 def init_low_rank(data_matrix, num_iter=200):
     m, n = data_matrix.m, data_matrix.n
-    state, X = algorithms.low_rank_poisson.fit_model(data_matrix, 2, num_iter=num_iter)
+    state, X = low_rank_poisson.fit_model(data_matrix, 2, num_iter=num_iter)
     U, V, ssq_U, ssq_N = state.U, state.V, state.ssq_U, state.ssq_N
 
     U /= ssq_U[nax, :] ** 0.25
@@ -30,7 +30,7 @@ def init_low_rank(data_matrix, num_iter=200):
 
 def init_row_clustering(data_matrix, isotropic, num_iter=200):
     m, n = data_matrix.m, data_matrix.n
-    state = algorithms.crp.fit_model(data_matrix, isotropic_w=isotropic, isotropic_b=isotropic, num_iter=num_iter)
+    state = crp.fit_model(data_matrix, isotropic_w=isotropic, isotropic_b=isotropic, num_iter=num_iter)
 
     U = np.zeros((m, state.assignments.max() + 1), dtype=int)
     U[np.arange(m), state.assignments] = 1
@@ -54,7 +54,7 @@ def init_col_clustering(data_matrix, isotropic, num_iter=200):
     return init_row_clustering(data_matrix.transpose(), isotropic, num_iter=num_iter).transpose()
 
 def init_row_binary(data_matrix, num_iter=200):
-    state = algorithms.ibp.fit_model(data_matrix, num_iter=num_iter)
+    state = ibp.fit_model(data_matrix, num_iter=num_iter)
 
     left = recursive.BernoulliNode(state.Z)
     
@@ -70,9 +70,9 @@ def init_col_binary(data_matrix, num_iter=200):
     return init_row_binary(data_matrix.transpose(), num_iter=num_iter).transpose()
 
 def init_row_chain(data_matrix, num_iter=200):
-    states, sigma_sq_D, sigma_sq_N = algorithms.chains.fit_model(data_matrix, num_iter=num_iter)
+    states, sigma_sq_D, sigma_sq_N = chains.fit_model(data_matrix, num_iter=num_iter)
 
-    integ = algorithms.chains.integration_matrix(data_matrix.m_orig)[data_matrix.row_ids, :]
+    integ = chains.integration_matrix(data_matrix.m_orig)[data_matrix.row_ids, :]
     left = recursive.IntegrationNode(integ)
     
     temp = np.vstack([states[0, :][nax, :],
@@ -106,17 +106,19 @@ def init_sparsity(data_matrix, mu_Z_mode, num_iter=200):
 
     # sparse_coding.py wants a full sparse coding problem, so pass in None for the things
     # that aren't relevant here
-    state = algorithms.sparse_coding.SparseCodingState(S, None, Z, None, -1., 1., None)
-    
+    state = sparse_coding.SparseCodingState(S, None, Z, None, -1., 1., None)
+
+    pbar = misc.pbar(num_iter)
     for i in range(num_iter):
-        algorithms.sparse_coding.sample_Z(state)
-        state.mu_Z = algorithms.sparse_coding.cond_mu_Z(state, by_column).sample()
-        state.sigma_sq_Z = algorithms.sparse_coding.cond_sigma_sq_Z(state).sample()
+        sparse_coding.sample_Z(state)
+        state.mu_Z = sparse_coding.cond_mu_Z(state, by_column).sample()
+        state.sigma_sq_Z = sparse_coding.cond_sigma_sq_Z(state).sample()
 
         if hasattr(debugger, 'after_init_sparsity_iter'):
             debugger.after_init_sparsity_iter(locals())
 
-        misc.print_dot(i+1, num_iter)
+        pbar.update(i)
+    pbar.finish()
 
     scale_node = recursive.GaussianNode(state.Z, 'scalar', state.sigma_sq_Z)
     return recursive.GSMNode(state.S, scale_node, mu_Z_mode, state.mu_Z)
@@ -143,6 +145,8 @@ def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
         frv = observations.DataMatrix.from_real_values
         inner_data_matrix = frv(node.value(), row_ids=row_ids, col_ids=col_ids,
                                 m_orig=m_orig, n_orig=n_orig)
+
+    print 'Initializing %s from %s...' % (grammar.pretty_print(new_structure), grammar.pretty_print(old_structure))
 
     if rule_name == 'low-rank':
         new_node = init_low_rank(inner_data_matrix, num_iter=num_iter)
