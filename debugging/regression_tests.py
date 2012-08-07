@@ -27,6 +27,22 @@ TEMP_NO_MISSING = False
 
 Ex = Exception
 
+
+PMF_MODEL = ('+', ('*', 'g', 'g'), 'g')
+MOG_MODEL = ('+', ('*', 'm', 'g'), 'g')
+MOG_TRANSPOSE_MODEL = ('+', ('*', 'g', 'M'), 'g')
+IBP_MODEL = ('+', ('*', 'b', 'g'), 'g')
+IBP_TRANSPOSE_MODEL = ('+', ('*', 'g', 'B'), 'g')
+IRM_MODEL = ('+', ('*', 'm', ('+', ('*', 'g', 'M'), 'g')), 'g')
+IRM_TRANSPOSE_MODEL = ('+', ('*', ('+', ('*', 'm', 'g'), 'g'), 'M'), 'g')
+BMF_MODEL = ('+', ('*', 'b', ('+', ('*', 'g', 'B'), 'g')), 'g')
+CHAIN_MODEL = ('+', ('*', 'c', 'g'), 'g')
+CHAIN_TRANSPOSE_MODEL = ('+', ('*', 'g', 'C'), 'g')
+KF_MODEL = ('+', ('*', ('+', ('*', 'c', 'g'), 'g'), 'g'), 'g')
+SPARSE_CODING_MODEL = ('+', ('*', 's', 'g'), 'g')
+
+
+
 def md5(obj):
     return hashlib.md5(str(obj)).hexdigest()
 
@@ -132,17 +148,17 @@ def generate_data(data_str, nrows=NROWS, ncols=NCOLS):
         return model.value(), train_rows, train_cols
 
 
-PMF_SEQ = [grammar.PMF_MODEL]
-MOG_SEQ = [grammar.MOG_MODEL]
-MOGT_SEQ = [grammar.MOG_TRANSPOSE_MODEL]
-IBP_SEQ = [grammar.IBP_MODEL]
-IBPT_SEQ = [grammar.IBP_TRANSPOSE_MODEL]
-IRM_SEQ = [grammar.MOG_MODEL, grammar.IRM_MODEL]
-IRMT_SEQ = [grammar.MOG_TRANSPOSE_MODEL, grammar.IRM_TRANSPOSE_MODEL]
-BMF_SEQ = [grammar.IBP_MODEL, grammar.BMF_MODEL]
-CHAIN_SEQ = [grammar.CHAIN_MODEL]
-CHAINT_SEQ = [grammar.CHAIN_TRANSPOSE_MODEL]
-KF_SEQ = [grammar.PMF_MODEL, grammar.KF_MODEL]
+PMF_SEQ = [PMF_MODEL]
+MOG_SEQ = [MOG_MODEL]
+MOGT_SEQ = [MOG_TRANSPOSE_MODEL]
+IBP_SEQ = [IBP_MODEL]
+IBPT_SEQ = [IBP_TRANSPOSE_MODEL]
+IRM_SEQ = [MOG_MODEL, IRM_MODEL]
+IRMT_SEQ = [MOG_TRANSPOSE_MODEL, IRM_TRANSPOSE_MODEL]
+BMF_SEQ = [IBP_MODEL, BMF_MODEL]
+CHAIN_SEQ = [CHAIN_MODEL]
+CHAINT_SEQ = [CHAIN_TRANSPOSE_MODEL]
+KF_SEQ = [PMF_MODEL, KF_MODEL]
 
 TO_TEST = {'pmf': [PMF_SEQ],
            'mog': [MOG_SEQ],

@@ -111,25 +111,6 @@ class GSMPredictiveDistribution(PredictiveDistribution):
         return np.dot(S, self.A)
 
 
-##     def predictive_for_rows_eig(self, rows):
-##         if self.Sigma.ndim == 2:
-##             N, D = len(rows), self.mu.size
-##             d1, Q = scipy.linalg.eigh(self.Sigma)
-##             d = np.zeros((N, D))
-##             d[:, :] = d1[nax, :]
-##             mu = np.zeros((N, D))
-##             mu[:, :] = self.mu[nax, :]
-##             return self.components, mu, d, Q
-##         else:
-##             # assume Sigma is co-diagonalizable
-##             assert self.Sigma.ndim == 3
-##             N, D = self.mu.shape
-##             d1, Q = scipy.linalg.eigh(self.Sigma)
-##             for i in range(N):
-##                 d[i, :] = np.dot(Q.T, np.dot(self.Sigma[i, :, :], Q))
-##                 assert np.allclose(self.Sigma[i, :, :], np.dot(Q, d[i, :][:, nax] * Q.T))
-##             return self.components, self.mu, d, Q
-
 
 
 
@@ -210,15 +191,6 @@ def extract_terms(node):
             return terms
 
 def collect_terms(terms):
-    #m, n = terms[0].values.shape
-
-    #fixed_values = np.zeros((m, n))
-    #gaussian_values = np.zeros((m, n))
-    #gaussian_mu = np.zeros(n)
-    #gaussian_Sigma = np.zeros((n, n))
-    #chain_values = np.zeros((m, n))
-    #chain_mu = np.zeros(n)
-    #chain_Sigma = np.zeros((n, n))
     fixed_values = 0.
     gaussian_values = 0.
     gaussian_mu = 0.
@@ -262,8 +234,6 @@ def collect_terms(terms):
 
     return fixed_term, gaussian_term, chain_term
 
-
-# kalman_filter(mu_0, Sigma_0, A, mu_v, Sigma_v, B, Lambda_n, y)
 
 def compute_gaussian_part(training_data_matrix, root, N):
     fixed_term, gaussian_term, chain_term = collect_terms(extract_terms(root))

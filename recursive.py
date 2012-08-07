@@ -579,8 +579,6 @@ def find_nodes(node, property):
 def print_clusters(data_matrix, root):
     mb_nodes = find_nodes(root, lambda node: isinstance(node, LeafNode) and node.distribution() in ['m', 'b']
                           and node.m == data_matrix.m)
-    #mb_nodes = find_nodes(root, lambda node: isinstance(node, LeafNode) and node.distribution() in ['m', 'b'])
-    #mb_nodes = find_nodes(root, lambda node: isinstance(node, LeafNode))
     print mb_nodes
     for node in mb_nodes:
         row_names = data_matrix.row_labels
@@ -590,7 +588,6 @@ def print_clusters(data_matrix, root):
                           and node.n == data_matrix.n)
     for node in MB_nodes:
         col_names = data_matrix.col_labels
-        #print location_string(decomp.root, node)
         print_clusters_helper(node.value().T, col_names)
 
 

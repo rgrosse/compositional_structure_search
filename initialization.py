@@ -7,28 +7,10 @@ import observations
 import recursive
 from utils import misc
 
-USE_OLD_LOW_RANK = False
 debugger = None
 
 
 def init_low_rank(data_matrix, num_iter=200):
-    m, n = data_matrix.m, data_matrix.n
-    K = min(data_matrix.m // 4, data_matrix.n // 4, 20)
-    K = max(K, 2)
-    U, V, ssq_U, ssq_V, ssq_N, _ = algorithms.low_rank.fit_model(data_matrix, 20, num_iter=num_iter)
-    #state, X = algorithms.low_rank_poisson.fit_model(data_matrix, 20, num_iter=num_iter)
-
-    left = recursive.GaussianNode(U, 'col', ssq_U)
-
-    right = recursive.GaussianNode(V, 'row', ssq_V)
-
-    pred = np.dot(U, V)
-    X = data_matrix.sample_latent_values(pred, ssq_N)
-    noise = recursive.GaussianNode(X - pred, 'scalar', ssq_N)
-
-    return recursive.SumNode([recursive.ProductNode([left, right]), noise])
-
-def init_low_rank2(data_matrix, num_iter=200):
     m, n = data_matrix.m, data_matrix.n
     state, X = algorithms.low_rank_poisson.fit_model(data_matrix, 2, num_iter=num_iter)
     U, V, ssq_U, ssq_N = state.U, state.V, state.ssq_U, state.ssq_N
@@ -131,9 +113,6 @@ def init_sparsity(data_matrix, mu_Z_mode, num_iter=200):
         state.mu_Z = algorithms.sparse_coding.cond_mu_Z(state, by_column).sample()
         state.sigma_sq_Z = algorithms.sparse_coding.cond_sigma_sq_Z(state).sample()
 
-        #assert np.all(np.abs(state.mu_Z) < 100.)
-        #assert np.all(np.abs(state.sigma_sq_Z) < 100.)
-
         if hasattr(debugger, 'after_init_sparsity_iter'):
             debugger.after_init_sparsity_iter(locals())
 
@@ -143,27 +122,6 @@ def init_sparsity(data_matrix, mu_Z_mode, num_iter=200):
     return recursive.GSMNode(state.S, scale_node, mu_Z_mode, state.mu_Z)
 
     
-
-
-## def init_row_sparse_coding(data_matrix):
-##     state = algorithms.sparse_coding.fit_model(data_matrix)
-
-##     left = recursive.SparseNode(state.S)
-##     left.Z = state.Z
-##     left.mu_Z = state.mu_Z
-##     left.sigma_sq_Z = state.sigma_sq_Z
-
-##     right = recursive.GaussianNode(state.A, 'scalar', 1. / state.A.shape[1])
-
-##     pred = np.dot(state.S, state.A)
-##     X = data_matrix.sample_latent_values(pred, state.sigma_sq_N)
-##     noise = recursive.GaussianNode(X - pred, 'scalar', state.sigma_sq_N)
-##     noise.set_ssq_scalar(state.sigma_sq_N)
-
-##     return recursive.SumNode([recursive.ProductNode([left, right]), noise])
-
-## def init_col_sparse_coding(data_matrix):
-##     return init_row_sparse_coding(data_matrix.transpose()).transpose()
 
 def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
     root = root.copy()
@@ -187,10 +145,7 @@ def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
                                 m_orig=m_orig, n_orig=n_orig)
 
     if rule_name == 'low-rank':
-        if USE_OLD_LOW_RANK:
-            new_node = init_low_rank(inner_data_matrix, num_iter=num_iter)
-        else:
-            new_node = init_low_rank2(inner_data_matrix, num_iter=num_iter)
+        new_node = init_low_rank(inner_data_matrix, num_iter=num_iter)
     elif rule_name == 'row-clustering':
         isotropic = (node is root)
         new_node = init_row_clustering(inner_data_matrix, isotropic, num_iter=num_iter)
@@ -207,14 +162,6 @@ def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
         new_node = init_col_chain(inner_data_matrix, num_iter=num_iter)
     elif rule_name == 'sparsity':
         new_node = init_sparsity(inner_data_matrix, node.variance_type, num_iter=num_iter)
-    #elif rule_name == 'row-multi-to-clustering':
-    #    new_node = init_row_multi_to_clustering(inner_data_matrix)
-    #elif rule_name == 'col-multi-to-clustering':
-    #    new_node = init_col_multi_to_clustering(inner_data_matrix)
-    #elif rule_name == 'row-integ-to-chain':
-    #    new_node = init_row_integ_to_chain(inner_data_matrix)
-    #elif rule_name == 'col-integ-to-chain':
-    #    new_node = init_col_integ_to_chain(inner_data_matrix)
     else:
         raise RuntimeError('Unknown production rule: %s' % rule_name)
 
