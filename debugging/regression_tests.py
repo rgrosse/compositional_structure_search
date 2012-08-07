@@ -213,8 +213,7 @@ def run_one(expt, data_str, sequence, missing=False):
     for structure in sequence:
         model = recursive.fit_model(structure, X_train, model)
 
-    row_loglik, col_loglik = scoring.evaluate_model(X_train, model, X_row_test, X_col_test,
-                                                    verbose=True, label='Test')
+    row_loglik, col_loglik = scoring.evaluate_model(X_train, model, X_row_test, X_col_test)
     
 
     
@@ -293,8 +292,7 @@ def compute_results(expt, subset=None, missing=False):
             for sample in samples:
                 try:
                     assert sample is not 'FAIL'
-                    row_loglik, col_loglik = scoring.evaluate_model(X_train, sample, X_row_test, X_col_test,
-                                                                    verbose=True, label='Test')
+                    row_loglik, col_loglik = scoring.evaluate_model(X_train, sample, X_row_test, X_col_test)
 
                     row_results[data_str, structure].append(np.mean(row_loglik))
                     col_results[data_str, structure].append(np.mean(col_loglik))
