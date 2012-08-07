@@ -2,7 +2,6 @@ import matplotlib
 if __name__ == '__main__':
     matplotlib.use('agg')
 
-import gc
 import hashlib
 import numpy as np
 nax = np.newaxis
@@ -10,7 +9,6 @@ import os
 import sys
 import termcolor
 import time
-import traceback
 
 import config
 import grammar
@@ -19,11 +17,7 @@ import recursive
 import scoring
 from utils import storage
 
-#BASEDIR = '/afs/csail/u/r/rgrosse/results/factorize/predictive'
-BASEDIR = os.path.join(config.RESULTS_PATH, 'predictive')
 CONFIG_DIR = './config/predictive'
-
-OLD_SAMPLES_DIR = False
 
 
 ######################## experiment files ######################################
@@ -32,7 +26,8 @@ def md5(obj):
     return hashlib.md5(str(obj)).hexdigest()
 
 def experiment_dir(name):
-    return os.path.join(BASEDIR, name)
+    basedir = os.path.join(config.RESULTS_PATH, 'predictive')
+    return os.path.join(basedir, name)
 def config_file(name):
     return os.path.join(CONFIG_DIR, '%s-config.txt' % name)
 def data_file(name):
@@ -54,13 +49,9 @@ def init_scores_file(name, level, structure, split_id, sample_id):
     return os.path.join(level_dir(name, level), 'init', 'scores-%s-%d-%d.pickle' % (grammar.pretty_print(structure, False, False),
                                                                                     split_id, sample_id))
 def samples_file(name, level, structure, split_id, sample_id):
-    if OLD_SAMPLES_DIR:
-        return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                            'samples-%d-%d.pickle' % (split_id, sample_id))
-    else:
-        return os.path.join(config.CACHE_PATH, 'predictive', name, 'level%d' % level,
-                            grammar.pretty_print(structure, False, False),
-                            'samples-%d-%d.pickle' % (split_id, sample_id))
+    return os.path.join(config.CACHE_PATH, 'predictive', name, 'level%d' % level,
+                        grammar.pretty_print(structure, False, False),
+                        'samples-%d-%d.pickle' % (split_id, sample_id))
 def scores_file(name, level, structure, split_id, sample_id):
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
                         'scores-%d-%d.pickle' % (split_id, sample_id))
@@ -86,7 +77,6 @@ def all_directories(name, level, structures):
 
 
 def create_directory(path):
-    assert not config.USE_AMAZON_S3
     idx = 0
     while True:
         try:
@@ -169,10 +159,9 @@ def nfold_cv(nrows, ncols, nsplits):
 
 
 def init_experiment(name, data_matrix, components=None, override=False, clean_data_matrix=None):
-    if not config.USE_AMAZON_S3:
-        if os.path.exists(experiment_dir(name)) and not override:
-            raise RuntimeError('Experiment %s already initialized.' % name)
-        create_directory(experiment_dir(name))
+    if os.path.exists(experiment_dir(name)) and not override:
+        raise RuntimeError('Experiment %s already initialized.' % name)
+    create_directory(experiment_dir(name))
     
     params = read_config_file(config_file(name))
     splits = nfold_cv(data_matrix.m, data_matrix.n, params['num-splits'])
@@ -201,11 +190,10 @@ def list_structure_pairs(init_structures):
 
 
 def init_level(name, level, override=False):
-    if not config.USE_AMAZON_S3:
-        if not os.path.exists(experiment_dir(name)):
-            raise RuntimeError('Experiment %s not yet initialized.' % name)
-        if os.path.exists(level_dir(name, level)) and not override:
-            raise RuntimeError('Level %d of experiment %s already initialized.' % (level, name))
+    if not os.path.exists(experiment_dir(name)):
+        raise RuntimeError('Experiment %s not yet initialized.' % name)
+    if os.path.exists(level_dir(name, level)) and not override:
+        raise RuntimeError('Level %d of experiment %s already initialized.' % (level, name))
     
     if level == 1:
         init_structures = ['g']
@@ -527,16 +515,10 @@ def list_init_jobs(name, level):
                                 winning_structures)
 
     params = read_config_file(config_file(name))
-    if config.USE_AMAZON_S3:
-        return [('init', name, level, s, split_id, sample_id)
-                for s in winning_structures
-                for split_id in range(params['num-splits'])
-                for sample_id in range(params['num-samples'])]
-    else:
-        return ['init %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
-                for s in winning_structures
-                for split_id in range(params['num-splits'])
-                for sample_id in range(params['num-samples'])]
+    return ['init %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
+            for s in winning_structures
+            for split_id in range(params['num-splits'])
+            for sample_id in range(params['num-samples'])]
 
 def list_jobs(name, level):
     # TODO: only those structures for which there was improvement
@@ -547,20 +529,13 @@ def list_jobs(name, level):
     
     params = read_config_file(config_file(name))
     structures = storage.load(structures_file(name, level))
-    if config.USE_AMAZON_S3:
-        return [('run', name, level, init_s, s, split_id, sample_id)
-                for init_s, s in structures
-                for split_id in range(params['num-splits'])
-                for sample_id in range(params['num-samples'])]
-    else:
-        return ['run %s %d %s %s %d %d' %
-                (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
-                for init_s, s in structures
-                for split_id in range(params['num-splits'])
-                for sample_id in range(params['num-samples'])]
+    return ['run %s %d %s %s %d %d' %
+            (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
+            for init_s, s in structures
+            for split_id in range(params['num-splits'])
+            for sample_id in range(params['num-samples'])]
 
 def list_jobs_failed(name, level):
-    assert not config.USE_AMAZON_S3
     if level > 1:
         winning_models = list_winning_models(name, level-1)
         if winning_models[-1] == '---':
@@ -587,20 +562,13 @@ def list_jobs_failed(name, level):
 
 def list_winner_jobs(name, num_levels):
     params = read_config_file(config_file(name))
-    if config.USE_AMAZON_S3:
-        return [('winner', name, num_levels, i) for i in range(params['num-samples'])]
-    else:
-        return ['winner %s %d %d' % (name, num_levels, i) for i in range(params['num-samples'])]
+    return ['winner %s %d %d' % (name, num_levels, i) for i in range(params['num-samples'])]
 
 def write_jobs(jobs, fname):
-    if config.USE_AMAZON_S3:
-        for j in jobs:
-            amazon.write_job(j)
-    else:
-        outstr = open(os.path.join(config.JOBS_PATH, fname), 'w')
-        for j in jobs:
-            print >> outstr, j
-        outstr.close()
+    outstr = open(os.path.join(config.JOBS_PATH, fname), 'w')
+    for j in jobs:
+        print >> outstr, j
+    outstr.close()
 
 
 
@@ -721,51 +689,9 @@ def average_running_time(name, level, structure):
     for i in range(params['num-splits']):
         for j in range(params['num-samples']):
             rtf = running_time_file(name, level, structure, i, j)
-            #total += float(open(rtf).read().strip())
-            #try:
-            #    total += float(storage.load(rtf))
-            #except:
-            #    assert not config.USE_AMAZON_S3
-            #    rtf = rtf[:-6] + 'txt'
-            #    total += float(open(rtf).read().strip())
             total += float(storage.load(rtf))
     return total / float(params['num-samples'] * params['num-splits'])
 
-
-def worker():
-    assert config.USE_AMAZON_S3
-    while True:
-        finished = worker_single()
-        if finished:
-            break
-        gc.collect()
-
-
-def worker_single():
-    assert config.USE_AMAZON_S3
-    amazon.setup_sqs()
-    job = amazon.read_message()
-    print 'job:', job
-    if job is None:
-        return True   # finished
-    try:
-    #if True:
-        if job[0] == 'init':
-            compute_init_samples(*job[1:])
-        elif job[0] == 'run':
-            run_model(*job[1:])
-        elif job[0] == 'winner':
-            fit_winning_sequence(*job[1:])
-        else:
-            raise RuntimeError('Unknown command: %s' % job[0])
-        amazon.write_message_finished()
-        amazon.delete_message()
-    #else:
-    except:
-        traceback.print_exc()
-        amazon.delete_message()
-        amazon.write_message_failed(traceback.format_exc())
-    return False   # not finished
 
 
 if __name__ == '__main__':
@@ -787,10 +713,6 @@ if __name__ == '__main__':
     elif cmd == 'winner':
         name, num_levels, sample_id = sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
         fit_winning_sequence(name, num_levels, sample_id)
-    elif cmd == 'worker':
-        worker()
-    elif cmd == 'worker-single':
-        worker_single()
 
 
 

@@ -3,7 +3,7 @@ import functools
 import sys
 import time
 
-ENABLE_PROFILER = True
+ENABLE_PROFILER = False
 TOP_ONLY = True
 
 depth = collections.defaultdict(int)

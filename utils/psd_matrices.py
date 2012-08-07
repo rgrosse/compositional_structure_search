@@ -58,11 +58,9 @@ class FullMatrix(BaseMatrix):
         self._S[S_slc] += other.full()._S
 
     def dot(self, x):
-        #return array_map(np.dot, [self._S, x], self.ndim)
         return dot(self._S, x)
 
     def qform(self, x):
-        #temp = array_map(np.dot, [self._S, x], self.ndim)
         temp = dot(self._S, x)
         return (temp * x).sum(-1)
 

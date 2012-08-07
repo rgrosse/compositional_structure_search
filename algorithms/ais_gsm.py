@@ -6,13 +6,9 @@ import predictive_distributions
 from utils import distributions
 import variational
 
-PLOT_DELTAS = False
 SIGMOID_SCHEDULE = True
 
 def p_s_given_z(S, Z, t, sigma_sq_approx):
-    #sigma_sq = np.exp((1. - t) * np.log(sigma_sq_approx[nax, :]) +
-    #                  t * np.exp(Z))
-    #return distributions.gauss_loglik(S, 0., sigma_sq)
     return (1. - t) * distributions.gauss_loglik(S, 0., sigma_sq_approx[nax, :]) + \
            t * distributions.gauss_loglik(S, 0., np.exp(Z))
 
@@ -172,8 +168,6 @@ def mh_multivariate_gaussian(U, f, mu, Sigma, epsilon):
     proposal = mu[nax, :] + \
                np.sqrt(1. - epsilon ** 2) * (U - mu[nax, :]) + \
                epsilon * perturbation
-    #L0 = p_s_given_z(S, Z0 + U, t, self.sigma_sq_approx).sum(1)
-    #L1 = p_s_given_z(S, Z0 + proposal, t, self.sigma_sq_approx).sum(1)
     L0 = f(U)
     L1 = f(proposal)
     accept = np.random.binomial(1, np.where(L1 > L0, 1., np.exp(L1 - L0)))
@@ -199,19 +193,6 @@ class InnerGaussianSampler:
         return mh_multivariate_gaussian(U, f, self.mu, self.Sigma, EPSILON)
 
         
-        ## perturbation = np.array([np.random.multivariate_normal(np.zeros(K), self.Sigma)
-        ##                          for i in range(N)])
-        ## proposal = self.mu[nax, :] + \
-        ##            np.sqrt(1. - EPSILON ** 2) * (U - self.mu[nax, :]) + \
-        ##            EPSILON * perturbation
-        ## L0 = p_s_given_z(S, Z0 + U, t, self.sigma_sq_approx).sum(1)
-        ## L1 = p_s_given_z(S, Z0 + proposal, t, self.sigma_sq_approx).sum(1)
-        ## accept = np.random.binomial(1, np.where(L1 > L0, 1., np.exp(L1 - L0)))
-        ## if np.isscalar(accept): # np.random.binomial converts length 1 arrays to scalars
-        ##     accept = np.array([accept])
-        ## U_new = np.where(accept[:, nax], U, proposal)
-        ## return U_new
-
     def contribution(self, U):
         return U
 
@@ -397,14 +378,6 @@ def ais(ais_model, t_schedule, variational_representations):
         if delta > 1.:
             stop = True
 
-        plot_every = len(t_schedule) // 10
-        if PLOT_DELTAS and (count+1) % plot_every == 0:
-            all_deltas_ = np.array(all_deltas)
-            vis.figure('Deltas')
-            pylab.plot(all_deltas_[1:, 0], hold=False)
-            vis.figure('total')
-            pylab.plot(init_partition_function[0] + np.cumsum(all_deltas_[1:, 0]), hold=False)
-            pylab.draw()
         count += 1
 
     return total

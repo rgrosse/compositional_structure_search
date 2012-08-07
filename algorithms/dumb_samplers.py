@@ -2,7 +2,6 @@ import numpy as np
 nax = np.newaxis
 import scipy.optimize
 
-import config
 import models
 import slice_sampling
 import sparse_coding
@@ -193,8 +192,6 @@ class GSMScaleSampler:
             mu = self.gsm_node.bias + scale_node.value() - scale_node.children[-1].value()
             sigma_sq = scale_node.children[-1].variance()
 
-        Z_orig = Z.copy()
-            
         for i in range(N):
             for k in range(K):
                 log_f = sparse_coding.LogFUncollapsed(S[i, k])

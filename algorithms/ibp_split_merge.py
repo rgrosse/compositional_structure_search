@@ -196,15 +196,11 @@ def split_merge_step(model, data, state):
     # choose random columns
     k1, k2 = choose_columns(K)
 
-    #print 'k1', k1
-    #print 'k2', k2
-
     # generate reduced problem
     prod = np.zeros(state.X.shape)
     for k in range(K):
         if k not in (k1, k2):
             prod += np.outer(state.Z[:, k], state.A[k, :])
-    #reduced_data = ibp.SimpleData(data.X - prod)
     reduced_data = observations.RealObservations(state.X - prod, np.ones(state.X.shape, dtype=bool))
     reduced_X = state.X - prod
     reduced_state = ibp.CollapsedIBPState(reduced_X, np.zeros((N, 2), dtype=int), state.sigma_sq_f, state.sigma_sq_n)
@@ -215,30 +211,19 @@ def split_merge_step(model, data, state):
 
     # propose assignments
     new_reduced_state, forward_prob = propose_assignments2(model, reduced_data, reduced_state, True)
-    #print 'forward_prob', forward_prob
     forward_prob += column_probability(K, k1, k2)
-    #print 'column_probability', column_probability(K, k1, k2)
 
     # score the states
     old_score = ibp_loglik(reduced_state.Z, model.alpha) + evidence(model, reduced_data, reduced_state)
     new_score = ibp_loglik(new_reduced_state.Z, model.alpha) + evidence(model, reduced_data, new_reduced_state)
 
-    #print 'old_ibp_loglik', ibp_loglik(reduced_state.Z, model.alpha)
-    #print 'old_evidence', evidence(model, reduced_data, reduced_state)
-    #print 'new_ibp_loglik', ibp_loglik(new_reduced_state.Z, model.alpha)
-    #print 'new_evidence', evidence(model, reduced_data, new_reduced_state)
-    
-
     # backward proposal probability
     K_back, k1_back, k2_back = backward_move_info(K, k1, k2, new_reduced_state)
     backward_prob = column_probability(K_back, k1_back, k2_back)
-    #print 'column_probability_back', backward_prob
     _, proposal_prob = propose_assignments2(model, reduced_data, reduced_state, False)
-    #print 'backward_prob', proposal_prob
     backward_prob += proposal_prob
 
     mh_score = new_score - old_score + backward_prob - forward_prob
-    #print 'mh_score', mh_score
     if mh_score > 0.:
         acceptance_prob = 1.
     else:
@@ -247,9 +232,6 @@ def split_merge_step(model, data, state):
     accept = np.random.binomial(1, acceptance_prob)
 
     if accept:
-        #print 'accept'
-        #print 'accepted %+d' % (K_back - K)
-        #print state.Z.shape[1], (state.Z>0).any(0).sum()
         A = sample_features(model, reduced_data, new_reduced_state)
         
         if k1 == 'new':
@@ -268,11 +250,8 @@ def split_merge_step(model, data, state):
             state.Z[:, k2] = new_reduced_state.Z[:, 1]
             state.A[k2, :] = A[1, :]
 
-        #print state.Z.shape[1], (state.Z>0).any(0).sum()
-        #assert (state.Z>0).any(0).sum() >= 5
     else:
         pass
-        #print 'reject'
-    #print
+
 
     

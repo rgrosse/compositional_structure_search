@@ -3,7 +3,6 @@ nax = np.newaxis
 import scipy.linalg
 import time
 
-import config
 from utils import misc
 
 
@@ -103,13 +102,6 @@ def chain_gibbs(X, obs, D, row_ids=None, row_variance=False):
         sigma_sq_D_cols = misc.sample_col_noise(D[1:,:] / np.sqrt(time_steps[:,nax]))
         sigma_sq_N_cols = misc.sample_col_noise(N)
 
-    #sigma_sq_N_rows = np.clip(sigma_sq_N_rows, 1e-4, 100.)
-    #sigma_sq_N_cols = np.clip(sigma_sq_N_cols, 1e-4, 100.)
-    #sigma_sq_D_rows = np.clip(sigma_sq_D_rows, 1e-4, 100.)
-    #sigma_sq_D_cols = np.clip(sigma_sq_D_cols, 1e-4, 100.)
-
-    #assert False
-
     for j in range(n):
         sigma_sq_D = sigma_sq_D_rows * sigma_sq_D_cols[j]
         sigma_sq_N = sigma_sq_N_rows * sigma_sq_N_cols[j]
@@ -135,32 +127,6 @@ def sample_variance(values):
     prec = np.clip(prec, 1e-4, 1e4)    # avoid numerical issues
     return 1. / prec
 
-def fit_model_old(data_matrix):
-    N, D = data_matrix.m, data_matrix.n
-    X = data_matrix.sample_latent_values(np.zeros((N, D)), 1.)
-    sigma_sq_D = sigma_sq_N = 1.
-
-    row_ids = data_matrix.row_ids
-    time_steps = row_ids[1:] - row_ids[:-1]
-
-    states = np.zeros((N, D))
-    resid = np.zeros((N, D))
-    diff = np.zeros((N-1, D))
-
-    for it in range(NUM_ITER):
-        sigma_sq_N_ = sigma_sq_N * np.ones(N)
-        for j in range(D):
-            states[:, j] = sample_single_chain(X[:, j], 1. / (time_steps * sigma_sq_D), 1. / sigma_sq_N_)
-            resid[:, j] = X[:, j] - states[:, j]
-            diff[:, j] = states[1:, j] - states[:-1, j]
-        sigma_sq_D = sample_variance(diff)
-        sigma_sq_N = sample_variance(resid)
-
-        X = data_matrix.sample_latent_values(states, sigma_sq_N)
-
-        misc.print_dot(it+1, NUM_ITER)
-
-    return states, sigma_sq_D, sigma_sq_N
 
 def fit_model(data_matrix, num_iter=NUM_ITER):
     N_orig, N, D = data_matrix.m_orig, data_matrix.m, data_matrix.n
