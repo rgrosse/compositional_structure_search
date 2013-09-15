@@ -218,6 +218,38 @@ def combine_precisions(Sigma_v, Lambda_y):
     ans_proj = scipy.linalg.inv(Sigma_v_proj + scipy.linalg.inv(Lambda_y_proj))
     return np.dot(np.dot(Q, ans_proj), Q.T)
 
+def integral_from_information(Lambda, J, c):
+    """Given the information form of an unnormalized gaussian
+            f(x) = -0.5 * x^T Lambda x - J^T x - c,
+    compute the integral."""
+    if np.isscalar(Lambda):
+        return 0.5 * np.log(2*np.pi) - 0.5 * np.log(Lambda) - c + 0.5 * J**2 / Lambda
+    else:
+        n = J.size
+        d, Q = scipy.linalg.eigh(Lambda)
+        return 0.5 * n * np.log(2*np.pi) - 0.5 * np.sum(np.log(d)) - c + 0.5 * np.dot(np.dot(J, np.linalg.inv(Lambda)), J)
+
+def information_to_expectation(Lambda, J, c=0.):
+    if np.isscalar(Lambda):
+        Sigma = 1. / Lambda
+        mu = -Sigma * J
+    else:
+        Sigma = np.linalg.inv(Lambda)
+        mu = -np.dot(Sigma, J)
+    log_Z = integral_from_information(Lambda, J, c)
+    return Sigma, mu, log_Z
+
+def expectation_to_information(Sigma, mu, log_Z=0.):
+    if np.isscalar(Sigma):
+        Lambda = 1. / Sigma
+        J = -Lambda * mu
+        c = -log_Z + 0.5 * np.log(2 * np.pi * Sigma) + 0.5 * mu**2 * Lambda
+    else:
+        Lambda = np.linalg.inv(Sigma)
+        J = -np.dot(Lambda, mu)
+        d, Q = np.linalg.eigh(Sigma)
+        c = -log_Z + 0.5 * np.sum(np.log(2 * np.pi * d)) + 0.5 * np.dot(np.dot(mu, Lambda), mu)
+    return Lambda, J, c
 
 
 def kalman_filter(mu_0, Sigma_0, A, mu_v, Sigma_v, B, Lambda_n, y):

@@ -193,7 +193,7 @@ def list_structure_pairs(init_structures):
     pairs = []
     next_structures = set()
     for s in init_structures:
-        succ = grammar.list_successors(s)
+        succ = grammar.list_collapsed_successors(s)
         for s1 in succ:
             if s1 not in next_structures:
                 pairs.append((s, s1))
@@ -310,7 +310,7 @@ def fit_winning_sequence(name, num_levels, sample_id):
     data_matrix = storage.load(data_file(name))
     sequence = sequence_of_structures(name, num_levels)
     params = storage.load(params_file(name))
-    decomps = recursive.fit_sequence(sequence, data_matrix, params.k)
+    decomps = recursive.fit_sequence(sequence, data_matrix, gibbs_steps=params.gibbs_steps)
     storage.dump(decomps, winning_samples_file(name, sample_id))
 
 
@@ -485,7 +485,7 @@ def sequence_of_structures(name, num_levels):
     for level in range(1, num_levels+1):
         if compute_improvement(name, level) < 1.:
             break
-        sequence.append(storage.load(winning_structures(name, level)[0]))
+        sequence.append(storage.load(winning_structure_file(name, level))[0])
     return sequence
 
 
@@ -554,7 +554,7 @@ def run_everything(name, num_levels, args):
         run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
         run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
         collect_scores_for_level(name, level)
-    run_jobs(final_model_jobs(name), args, final_model_key(name))
+    run_jobs(final_model_jobs(name, num_levels), args, final_model_key(name))
 
 
 ###################### summarizing the results #################################
@@ -733,10 +733,10 @@ if __name__ == '__main__':
 
     elif command == 'final':
         parser.add_argument('name', type=str)
-        parser.add_argument('level', type=int)
+        parser.add_argument('num_levels', type=int)
         add_scheduler_args(parser)
         args = parser.parse_args()
-        run_jobs(final_model_jobs(args.name), args, final_model_key(args.name))
+        run_jobs(final_model_jobs(args.name, args.num_levels), args, final_model_key(args.name))
 
     elif command == 'final_job':
         parser.add_argument('name', type=str)

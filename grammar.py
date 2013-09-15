@@ -54,12 +54,15 @@ def is_factorization(structure):
     return False
 
 
-def list_successors_helper(structure):
+def list_successors_helper(structure, is_noise=False):
     if type(structure) == str:
         return [s for n, f, s in PRODUCTION_RULES if f == structure]
     successors = []
     for pos in range(len(structure)):
-        for child_succ in list_successors_helper(structure[pos]):
+        is_noise = (structure[0] == '+' and pos == len(structure) - 1)
+        for child_succ in list_successors_helper(structure[pos], is_noise):
+            if is_noise and type(child_succ) == tuple and child_succ[0] == 's':
+                continue
             successors.append(structure[:pos] + (child_succ,) + structure[pos+1:])
     return successors
 

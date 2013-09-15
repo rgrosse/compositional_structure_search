@@ -90,7 +90,7 @@ def init_col_chain(data_matrix, num_iter=200):
 
 def init_sparsity(data_matrix, mu_Z_mode, num_iter=200):
     if mu_Z_mode == 'row':
-        return init_sparsity(data_matrix.transpose(), 'col', num_iter)
+        return init_sparsity(data_matrix.transpose(), 'col', num_iter).transpose()
     elif mu_Z_mode == 'col':
         by_column = True
     elif mu_Z_mode == 'scalar':
