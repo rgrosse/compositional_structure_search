@@ -120,23 +120,15 @@ def generate_data(data_str, nrows, ncols, ncomp, return_components=False):
 ALL_MODELS = ['pmf', 'mog', 'ibp', 'chain', 'irm', 'bmf', 'kf', 'bctf', 'sparse', 'gsm']
 
 
-def write_config_files(condition):
-    # create dummy config files that point to default-config.txt
-    for model in ALL_MODELS:
-        config_file = './config/predictive/synthetic/%s/%s-config.txt' % (condition, model)
-        outstr = open(config_file, 'w')
-        print >> outstr, '#include default-config.txt'
-        outstr.close()
-
 def init_experiment():
     for condition in ['0.1', '1.0', '3.0', '10.0']:
         for model in ALL_MODELS:
             name = 'synthetic/%s/%s' % (condition, model)
-            params = experiments.read_config_file(experiments.config_file(name))
             print condition, model
             data, components = generate_data(model, NUM_ROWS, NUM_COLS, NUM_COMPONENTS, True)
             clean_data_matrix = observations.DataMatrix.from_real_values(data)
-            noisy_data = np.random.normal(data, np.sqrt(params['noise-var']))
+            noise_var = float(condition)
+            noisy_data = np.random.normal(data, np.sqrt(noise_var))
             data_matrix = observations.DataMatrix.from_real_values(noisy_data)
             experiments.init_experiment(name, data_matrix, components, clean_data_matrix=clean_data_matrix)
         

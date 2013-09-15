@@ -17,7 +17,32 @@ import recursive
 import scoring
 from utils import storage
 
-CONFIG_DIR = './config/predictive'
+
+####################### parameters #############################################
+
+class DefaultParams:
+    num_splits = 5                 # Number of row/column splits for cross-validation
+    num_samples = 5                # Number of independent sampling runs for each model
+    num_expand = 3                 # Number of models to expand in each round
+    num_steps_ais = 2000           # Number of AIS steps for GSM models
+    save_samples = False           # Whether to save the posterior samples (can take up lots of disk space)
+
+    def __setattr__(self, k, v):
+        """Make sure the field already exists, to catch typos."""
+        if not hasattr(self, k):
+            raise RuntimeError("No such field '%s'; maybe a typo?" % k)
+        self.__dict__[k] = v
+
+class SmallParams(DefaultParams):
+    """Reasonable parameter settings for small matrices"""
+    pass
+
+class LargeParams(DefaultParams):
+    """Reasonable parameter settings for larger matrices"""
+    num_splits = 2
+
+
+
 
 
 ######################## experiment files ######################################
@@ -28,8 +53,6 @@ def md5(obj):
 def experiment_dir(name):
     basedir = os.path.join(config.RESULTS_PATH, 'predictive')
     return os.path.join(basedir, name)
-def config_file(name):
-    return os.path.join(CONFIG_DIR, '%s-config.txt' % name)
 def data_file(name):
     return os.path.join(experiment_dir(name), 'data.pickle')
 def splits_file(name):
@@ -88,53 +111,27 @@ def create_directory(path):
     if not os.path.exists(path):
         os.mkdir(path)
 
-
-
-PARAM_NAMES = {'num-splits': int,
-               'k': int,
-               'num-samples': int,
-               'noise-var': float,
-               'num-winners': int,
-               'save-samples': bool,
-               'num-steps-ais': int,
-               }
-
-def read_config_file(fname, require_all=False):
-    params_dir, _ = os.path.split(fname)
-    instr = open(fname)
-    params = {}
-    for line_ in instr:
-        line = line_.strip()
-        if line == '':
-            continue
-        
-        if line[0] == '#':
-            parts = line.split()
-            if parts[0] == '#include':
-                include_file = os.path.join(params_dir, parts[1])
-                include_params = read_config_file(include_file, False)
-                for k, v in include_params.items():
-                    params[k] = v
-            else:
-                raise RuntimeError('Unknown macro: %s' % parts[0])
-        else:
-            parts = map(str.strip, line.split(':'))
-            param_name, param_val = parts
-            if param_name not in PARAM_NAMES:
-                raise RuntimeError('Unknown parameter: %s' % param_name)
-            tp = PARAM_NAMES[param_name]
-            if tp == bool:
-                params[param_name] = eval(param_val)
-                assert type(params[param_name]) == bool
-            else:
-                params[param_name] = tp(param_val)
-
-    if require_all:
-        for k in PARAM_NAMES:
-            if k not in params:
-                raise RuntimeError('Parameter %s not defined' % k)
+def get_params(name):
+    if name.find('synthetic') != -1:
+        params = SmallParams()
+    elif name == 'image-patches':
+        params = SmallParams()
+        params.save_samples = True
+    elif name == 'intel':
+        params = LargeParams()
+        params.save_samples = True
+    elif name == 'mocap':
+        params = SmallParams()
+        params.save_samples = True
+    elif name == 'senate':
+        params = SmallParams()
+        params.save_samples = True
+    else:
+        raise RuntimeError('Unknown experiment name: %s' % name)
 
     return params
+
+
 
 
 ############################# initialization ###################################
@@ -163,8 +160,8 @@ def init_experiment(name, data_matrix, components=None, override=False, clean_da
         raise RuntimeError('Experiment %s already initialized.' % name)
     create_directory(experiment_dir(name))
     
-    params = read_config_file(config_file(name))
-    splits = nfold_cv(data_matrix.m, data_matrix.n, params['num-splits'])
+    params = get_params(name)
+    splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
     #cPickle.dump(splits, open(splits_file(name), 'w'), protocol=2)
     storage.dump(splits, splits_file(name))
 
@@ -237,7 +234,7 @@ def load_data(name):
 
 TEMP_GIBBS_STEPS = 200 # temporary
 def sample_from_model(name, level, init_structure, structure, split_id, sample_id):
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     data_matrix = load_data(name)
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
@@ -248,7 +245,7 @@ def sample_from_model(name, level, init_structure, structure, split_id, sample_i
         init = X_train.sample_latent_values(np.zeros((X_train.m, X_train.n)), 1.)
         prev_model = recursive.GaussianNode(init, 'scalar', 1.)
     else:
-        if params['save-samples']:
+        if params.save_samples:
             prev_model = storage.load(samples_file(name, level-1, init_structure, split_id, sample_id))
         else:
             prev_model = storage.load(init_samples_file(name, level, init_structure, split_id, sample_id))
@@ -258,7 +255,7 @@ def sample_from_model(name, level, init_structure, structure, split_id, sample_i
     return recursive.fit_model(structure, X_train, prev_model, gibbs_steps=TEMP_GIBBS_STEPS)
 
 def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
@@ -270,7 +267,7 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
     if level == 1:
         init_row_loglik = init_col_loglik = None
     else:
-        if params['save-samples']:
+        if params.save_samples:
             init_row_loglik, init_col_loglik = storage.load(scores_file(name, level-1, init_structure,
                                                                         split_id, sample_id))
         else:
@@ -278,7 +275,7 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
                                                                              split_id, sample_id))
 
     if 'num-steps-ais' in params:
-        num_steps = params['num-steps-ais']
+        num_steps = params.num_steps_ais
     else:
         num_steps = 2000
     row_loglik, col_loglik = scoring.evaluate_model(X_train, root, X_row_test, X_col_test,
@@ -288,10 +285,10 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
     return row_loglik, col_loglik
 
 def run_model(name, level, init_structure, structure, split_id, sample_id, save=True, save_sample=False):
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     t0 = time.time()
     root = sample_from_model(name, level, init_structure, structure, split_id, sample_id)
-    if save and (save_sample or params['save-samples']):
+    if save and (save_sample or params.save_samples):
         storage.dump(root, samples_file(name, level, structure, split_id, sample_id))
         print 'Saved.'
     row_loglik, col_loglik = evaluate_decomp(name, level, init_structure, split_id, sample_id, root)
@@ -322,8 +319,8 @@ def fit_winning_sequence(name, num_levels, sample_id):
     #data_matrix = storage.load(data_file(name))
     data_matrix = load_data(name)
     sequence = sequence_of_structures(name, num_levels)
-    params = read_config_file(config_file(name))
-    decomps = recursive.fit_sequence(sequence, data_matrix, params['k'])
+    params = get_params(name)
+    decomps = recursive.fit_sequence(sequence, data_matrix, params.k)
     #cPickle.dump(decomps, open(winning_samples_file(name, sample_id), 'w'), protocol=2)
     storage.dump(decomps, winning_samples_file(name, sample_id))
 
@@ -383,7 +380,7 @@ def structureless_scores(name):
     return PredictiveLikelihoodScores(row_loglik, col_loglik, num_entries)
 
 def collect_scores(name, level, structure):
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     splits = storage.load(splits_file(name))
 
     row_loglik_all = []
@@ -392,7 +389,7 @@ def collect_scores(name, level, structure):
 
     for split_id, (train_rows, train_cols, test_rows, test_cols) in enumerate(splits):
         row_loglik_curr, col_loglik_curr = [], []
-        num_samples = params['num-samples']
+        num_samples = params.num_samples
         for sample_id in range(num_samples):
             try:
                 row_loglik_single, col_loglik_single = storage.load(scores_file(name, level, structure, split_id, sample_id))
@@ -417,8 +414,8 @@ def compute_scores(name, level, structure):
         if structure != 'g': raise RuntimeError('Invalid structure for level 0: %s' % structure)
         return structureless_scores(name)
 
-    params = read_config_file(config_file(name))
-    num_samples = params['num-samples']
+    params = get_params(name)
+    num_samples = params.num_samples
     splits = storage.load(splits_file(name))
 
     row_loglik_all, col_loglik_all = storage.load(collected_scores_file(name, level, structure))
@@ -453,7 +450,7 @@ def init_structure_for(name, level, structure):
 def winning_structures(name, level):
     if level == 0:
         return ['g']
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     structures = storage.load(structures_file(name, level))
     #if type(structures[0]) == tuple:
     if is_list_of_pairs(structures):
@@ -461,7 +458,7 @@ def winning_structures(name, level):
     structures = filter(lambda s: compute_scores(name, level, s) is not None, structures)    # ignore failures
     #return max(structures, key=lambda s: compute_scores(name, level, s).total())
     structures.sort(key=lambda s: compute_scores(name, level, s).total(), reverse=True)
-    return structures[:params['num-winners']]
+    return structures[:params.num_expand]
 
 def save_winning_structures(name, level):
     storage.dump(winning_structures(name, level), winning_structure_file(name, level))
@@ -485,9 +482,9 @@ def sequence_of_structures(name, num_levels):
     return sequence
 
 def pick_winning_sample(name):
-    params = read_config_file(config_file(name))
-    scores = np.zeros(params['num-samples'])
-    for sample_id in range(params['num-samples']):
+    params = get_params(name)
+    scores = np.zeros(params.num_samples)
+    for sample_id in range(params.num_samples):
         curr_scores = storage.load(winning_training_scores_file(name, sample_id))
         row_loglik, col_loglik = curr_scores[-1]
         scores[sample_id] = np.sum(row_loglik) + np.sum(col_loglik)
@@ -514,11 +511,11 @@ def list_init_jobs(name, level):
     winning_structures = filter(lambda s: compute_improvement(name, level-1, s) > 1.,
                                 winning_structures)
 
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     return ['init %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
             for s in winning_structures
-            for split_id in range(params['num-splits'])
-            for sample_id in range(params['num-samples'])]
+            for split_id in range(params.num_splits)
+            for sample_id in range(params.num_samples)]
 
 def list_jobs(name, level):
     # TODO: only those structures for which there was improvement
@@ -527,13 +524,13 @@ def list_jobs(name, level):
 ##         if winning_models[-1] == '---':
 ##             return []
     
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     structures = storage.load(structures_file(name, level))
     return ['run %s %d %s %s %d %d' %
             (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
             for init_s, s in structures
-            for split_id in range(params['num-splits'])
-            for sample_id in range(params['num-samples'])]
+            for split_id in range(params.num_splits)
+            for sample_id in range(params.num_samples)]
 
 def list_jobs_failed(name, level):
     if level > 1:
@@ -541,14 +538,14 @@ def list_jobs_failed(name, level):
         if winning_models[-1] == '---':
             return []
     
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     #structures = cPickle.load(open(structures_file(name, level)))
     structures = storage.load(structures_file(name, level))
 
     jobs = []
     for init_s, s in structures:
-        for split_id in range(params['num-splits']):
-            for sample_id in range(params['num-samples']):
+        for split_id in range(params.num_splits):
+            for sample_id in range(params.num_samples):
                 if not os.path.exists(scores_file(name, level, s, split_id, sample_id)):
                     jobs.append(('run', name, level, init_s, s, split_id, sample_id))
                     
@@ -561,8 +558,8 @@ def list_jobs_failed(name, level):
     
 
 def list_winner_jobs(name, num_levels):
-    params = read_config_file(config_file(name))
-    return ['winner %s %d %d' % (name, num_levels, i) for i in range(params['num-samples'])]
+    params = get_params(name)
+    return ['winner %s %d %d' % (name, num_levels, i) for i in range(params.num_samples)]
 
 def write_jobs(jobs, fname):
     outstr = open(os.path.join(config.JOBS_PATH, fname), 'w')
@@ -684,13 +681,13 @@ def fit_sequence(name, sequence):
 
 
 def average_running_time(name, level, structure):
-    params = read_config_file(config_file(name))
+    params = get_params(name)
     total = 0.
-    for i in range(params['num-splits']):
-        for j in range(params['num-samples']):
+    for i in range(params.num_splits):
+        for j in range(params.num_samples):
             rtf = running_time_file(name, level, structure, i, j)
             total += float(storage.load(rtf))
-    return total / float(params['num-samples'] * params['num-splits'])
+    return total / float(params.num_samples * params.num_splits)
 
 
 
