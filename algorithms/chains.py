@@ -20,21 +20,8 @@ def sample_single_chain(t, lambda_D, lambda_N):
     a[0, 1:] = off_diag
     a[1,:] = diagonal
 
-    # There appears to be a bug in scipy.linalg.solveh_banded, where
-    # it expects a row vector for the b argument, when the documentation
-    # seems to want a 1-D vector.
-    # http://projects.scipy.org/scipy/attachment/ticket/676/test_solveh_banded.py
-    #
-    # update 7-17-11: they have since fixed the problem, but also removed the Cholesky return value
-    if scipy.version.version in ['0.9.0rc2', '0.9.0', '0.10.0']:
-        x = scipy.linalg.solveh_banded(a, t * lambda_N)
-        c = scipy.linalg.cholesky_banded(a)
-    elif scipy.version.version == '0.8.0':
-        c, x = scipy.linalg.solveh_banded(a, t * lambda_N)
-    elif scipy.version.version == '0.7.1':
-        c, x = scipy.linalg.solveh_banded(a, (t * lambda_N)[nax,:])
-    else:
-        raise RuntimeError('Unknown SciPy version: %s' % scipy.version.version)
+    x = scipy.linalg.solveh_banded(a, t * lambda_N)
+    c = scipy.linalg.cholesky_banded(a)
     
     x = x.ravel()
 
@@ -60,20 +47,7 @@ def single_chain_marginal(t, lambda_D, lambda_N):
     a[0, 1:] = off_diag
     a[1,:] = diagonal
 
-    # There appears to be a bug in scipy.linalg.solveh_banded, where
-    # it expects a row vector for the b argument, when the documentation
-    # seems to want a 1-D vector.
-    # http://projects.scipy.org/scipy/attachment/ticket/676/test_solveh_banded.py
-    # 
-    # update 7-17-11: they have since fixed the problem, but also removed the Cholesky return value
-    if scipy.version.version in ['0.9.0rc2', '0.9.0', '0.10.0']:
-        x = scipy.linalg.solveh_banded(a, t * lambda_N)
-    elif scipy.version.version == '0.8.0':
-        c, x = scipy.linalg.solveh_banded(a, t * lambda_N)
-    elif scipy.version.version == '0.7.1':
-        c, x = scipy.linalg.solveh_banded(a, (t * lambda_N)[nax,:])
-    else:
-        raise RuntimeError('Unknown SciPy version: %s' % scipy.version.version)
+    x = scipy.linalg.solveh_banded(a, t * lambda_N)
     x = x.ravel()
 
     Lambda = np.diag(diagonal) + np.diag(off_diag, -1) + np.diag(off_diag, 1)

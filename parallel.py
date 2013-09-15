@@ -47,7 +47,7 @@ def run_command(command, jobs, machines=None, chdir=None):
     p = subprocess.Popen(args, shell=False, stdin=subprocess.PIPE)
     p.communicate('\n'.join(jobs))
 
-def run(script, jobs, machines=None, key=None, email=True, rm_status=True):
+def run(script, jobs, machines=None, key=None, email=False, rm_status=True):
     if key is not None:
         if not os.path.exists(_status_path(key)):
             os.mkdir(_status_path(key))
@@ -93,19 +93,7 @@ def parse_machines(s, njobs):
     if s is None:
         return s
     parts = s.split(',')
-    result = []
-    for p in parts:
-        if p == ':':
-            result.append('%d/:' % njobs)
-        elif p.find(':') != -1:
-            lower_str, upper_str = p.split(':')
-            for i in range(int(lower_str), int(upper_str) + 1):
-                result.append('%d/vision%02d' % (njobs, i))
-        elif isint(p):
-            result.append('%d/vision%02d' % (njobs, int(p)))
-        else:
-            result.append('%d/%s' % (njobs, p))
-    return result
+    return ['%d/%s' % (njobs, p) for p in parts]
 
 def list_jobs(key, status_val):
     status_files = [os.path.join(_status_path(key), 'status.txt')]

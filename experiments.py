@@ -38,9 +38,17 @@ class DefaultParams:
 
     def __setattr__(self, k, v):
         """Make sure the field already exists, to catch typos."""
-        if not hasattr(self, k):
+        if not hasattr(DefaultParams, k):
             raise RuntimeError("No such field '%s'; maybe a typo?" % k)
         self.__dict__[k] = v
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        for k, v in self.__class__.__dict__.items():       # check for typos in subclasses
+            if not hasattr(DefaultParams, k):
+                raise RuntimeError("No such field '%s'; maybe a typo in %s class definition?" %
+                                   (k, self.__class__))
 
 class SmallParams(DefaultParams):
     """Reasonable parameter settings for small matrices"""
@@ -50,7 +58,13 @@ class LargeParams(DefaultParams):
     """Reasonable parameter settings for larger matrices"""
     num_splits = 2
 
-
+class DebugParams(DefaultParams):
+    """Parameter settings for debugging, so you can quickly run jobs and make sure they don't crash"""
+    num_splits = 5
+    num_samples = 2
+    num_expand = 1
+    num_steps_ais = 20
+    gibbs_steps = 10
 
 
 
@@ -61,25 +75,27 @@ def md5(obj):
 
 def experiment_dir(name):
     """Main directory used for all structure search results."""
-    basedir = os.path.join(config.RESULTS_PATH, 'predictive')
-    return os.path.join(basedir, name)
+    return os.path.join(config.RESULTS_PATH, name)
+
+def params_file(name):
+    return os.path.join(experiment_dir(name), 'params.pk')
 
 def data_file(name):
     """The original data matrix, stored as an observations.DataMatrix instance."""
-    return os.path.join(experiment_dir(name), 'data.pickle')
+    return os.path.join(experiment_dir(name), 'data.pk')
 
 def splits_file(name):
     """The cross-validation splits, stored as a list of (train_rows, train_cols,
     test_rows, test_cols) tuples."""
-    return os.path.join(experiment_dir(name), 'splits.pickle')
+    return os.path.join(experiment_dir(name), 'splits.pk')
 
 def clean_data_file(name):
     """The observation matrix before noise was added, if applicable."""
-    return os.path.join(experiment_dir(name), 'clean-data.pickle')
+    return os.path.join(experiment_dir(name), 'clean-data.pk')
 
 def components_file(name):
     """The true decomposition, as a recursive.Decomp instance, if applicable."""
-    return os.path.join(experiment_dir(name), 'components.pickle')
+    return os.path.join(experiment_dir(name), 'components.pk')
 
 def level_dir(name, level):
     """The directory containing the results of one level of the search."""
@@ -88,72 +104,50 @@ def level_dir(name, level):
 def structures_file(name, level):
     """The list of all structures to be evaluated in a given level of the search.
     Stored as a list of (init_structure, successor_structure) pairs."""
-    return os.path.join(level_dir(name, level), 'structures.pickle')
+    return os.path.join(level_dir(name, level), 'structures.pk')
 
 def init_samples_file(name, level, structure, split_id, sample_id):
     """The decomposition to be used as the initialization for a given structure, i.e.
     one of the top performing structures from the previous level."""
-    return os.path.join(level_dir(name, level), 'init', 'samples-%s-%d-%d.pickle' % (grammar.pretty_print(structure, False, False),
+    return os.path.join(level_dir(name, level), 'init', 'samples-%s-%d-%d.pk' % (grammar.pretty_print(structure, False, False),
                                                                                      split_id, sample_id))
 
 def init_scores_file(name, level, structure, split_id, sample_id):
     """The row and column log-likelihood scores for the model used as an initialization.
     Stored as a (row_log_likelihood, column_log_likelihood) pair, where each is a vector
     giving the performance on all the test rows/columns."""
-    return os.path.join(level_dir(name, level), 'init', 'scores-%s-%d-%d.pickle' % (grammar.pretty_print(structure, False, False),
+    return os.path.join(level_dir(name, level), 'init', 'scores-%s-%d-%d.pk' % (grammar.pretty_print(structure, False, False),
                                                                                     split_id, sample_id))
 
 def samples_file(name, level, structure, split_id, sample_id):
     """A posterior sample for a given structure."""
-    return os.path.join(config.CACHE_PATH, 'predictive', name, 'level%d' % level,
+    return os.path.join(config.CACHE_PATH,  name, 'level%d' % level,
                         grammar.pretty_print(structure, False, False),
-                        'samples-%d-%d.pickle' % (split_id, sample_id))
+                        'samples-%d-%d.pk' % (split_id, sample_id))
 
 def scores_file(name, level, structure, split_id, sample_id):
     """The predictive log-likelihood scores on held-out data for a given CV split."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                        'scores-%d-%d.pickle' % (split_id, sample_id))
+                        'scores-%d-%d.pk' % (split_id, sample_id))
 
 def collected_scores_file(name, level, structure):
     """The predictive log-likelihood scores for a given structure, collected over all CV
     splits and ordered by the indices in the original data matrix."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                        'collected-scores.pickle')
+                        'collected-scores.pk')
 
 def winning_structure_file(name, level):
     """The highest performing structure at a given level of the search."""
-    return os.path.join(level_dir(name, level), 'winning-structure.pickle')
+    return os.path.join(level_dir(name, level), 'winning-structure.pk')
 
 def running_time_file(name, level, structure, split_id, sample_id):
     """The running time for sampling from the posterior and computing predictive likelihood."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                        'time-%d-%d.pickle' % (split_id, sample_id))
+                        'time-%d-%d.pk' % (split_id, sample_id))
 
 def winning_samples_file(name, sample_id):
     """Posterior samples from each model in the sequence chosen by the structure search."""
-    return os.path.join(experiment_dir(name), 'winning-samples-%d.pickle' % sample_id)
-
-
-
-def get_params(name):
-    if name.find('synthetic') != -1:
-        params = SmallParams()
-    elif name == 'image-patches':
-        params = SmallParams()
-        params.save_samples = True
-    elif name == 'intel':
-        params = LargeParams()
-        params.save_samples = True
-    elif name == 'mocap':
-        params = SmallParams()
-        params.save_samples = True
-    elif name == 'senate':
-        params = SmallParams()
-        params.save_samples = True
-    else:
-        raise RuntimeError('Unknown experiment name: %s' % name)
-
-    return params
+    return os.path.join(experiment_dir(name), 'winning-samples-%d.pk' % sample_id)
 
 
 
@@ -176,15 +170,13 @@ def nfold_cv(nrows, ncols, nsplits):
     return splits
 
 
-def init_experiment(name, data_matrix, components=None, override=False, clean_data_matrix=None):
+def init_experiment(name, data_matrix, params, components=None, clean_data_matrix=None):
     """Initialize the structure search by saving the matrix, and possibly auxiliary
     information, to files, and generating cross-validation splits."""
-    if os.path.exists(experiment_dir(name)) and not override:
-        raise RuntimeError('Experiment %s already initialized.' % name)
     if not os.path.exists(experiment_dir(name)):
         os.mkdir(experiment_dir(name))
-    
-    params = get_params(name)
+
+    storage.dump(params, params_file(name))
     splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
     storage.dump(splits, splits_file(name))
 
@@ -212,13 +204,11 @@ def list_structure_pairs(init_structures):
     return pairs
 
 
-def init_level(name, level, override=False):
+def init_level(name, level):
     """Initialize a given level of the search by saving all of the structures which need
     to be evaluated."""
     if not os.path.exists(experiment_dir(name)):
         raise RuntimeError('Experiment %s not yet initialized.' % name)
-    if os.path.exists(level_dir(name, level)) and not override:
-        raise RuntimeError('Level %d of experiment %s already initialized.' % (level, name))
     
     if level == 1:
         init_structures = ['g']
@@ -238,7 +228,7 @@ def init_level(name, level, override=False):
 
 def sample_from_model(name, level, init_structure, structure, split_id, sample_id):
     """Run an MCMC sampler to approximately sample from the posterior."""
-    params = get_params(name)
+    params = storage.load(params_file(name))
     data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
@@ -260,7 +250,7 @@ def sample_from_model(name, level, init_structure, structure, split_id, sample_i
 
 def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
     """Given a posterior sample, evaluate the predictive likelihood on the test rows and columns."""
-    params = get_params(name)
+    params = storage.load(params_file(name))
     data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
@@ -287,7 +277,7 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
 
 def run_model(name, level, init_structure, structure, split_id, sample_id, save=True, save_sample=False):
     """Sample from the posterior given the training data, and evaluate on heldout rows/columns."""
-    params = get_params(name)
+    params = storage.load(params_file(name))
     t0 = time.time()
     root = sample_from_model(name, level, init_structure, structure, split_id, sample_id)
     if save and (save_sample or params.save_samples):
@@ -322,7 +312,7 @@ def fit_winning_sequence(name, num_levels, sample_id):
     data matrix."""
     data_matrix = storage.load(data_file(name))
     sequence = sequence_of_structures(name, num_levels)
-    params = get_params(name)
+    params = storage.load(params_file(name))
     decomps = recursive.fit_sequence(sequence, data_matrix, params.k)
     storage.dump(decomps, winning_samples_file(name, sample_id))
 
@@ -396,7 +386,7 @@ def collect_scores_for_level(name, level):
 def collect_scores(name, level, structure):
     """Collect the held-out predictive log-likelihood scores for all CV splits and
     order them according to the indices of the original data matrix."""
-    params = get_params(name)
+    params = storage.load(params_file(name))
     splits = storage.load(splits_file(name))
 
     row_loglik_all = []
@@ -432,7 +422,7 @@ def compute_scores(name, level, structure):
         if structure != 'g': raise RuntimeError('Invalid structure for level 0: %s' % structure)
         return structureless_scores(name)
 
-    params = get_params(name)
+    params = storage.load(params_file(name))
     num_samples = params.num_samples
     splits = storage.load(splits_file(name))
 
@@ -470,7 +460,7 @@ def winning_structures(name, level):
     """Determine the set of structures to expand."""
     if level == 0:
         return ['g']
-    params = get_params(name)
+    params = storage.load(params_file(name))
     structures = storage.load(structures_file(name, level))
     structures = [s for _, s in structures]
     structures = filter(lambda s: compute_scores(name, level, s) is not None, structures)    # ignore failures
@@ -503,12 +493,21 @@ def sequence_of_structures(name, num_levels):
 
 
 
-############################# GNU Parallel #####################################
+############################# Job scheduling ###################################
+
+def run_jobs(jobs, args, key):
+    if config.SCHEDULER == 'parallel':
+        machines = parallel.parse_machines(args.machines, args.njobs)
+        parallel.run('experiments.py', jobs, machines=machines, key=key)
+    elif config.SCHEULER == 'single_process':
+        single_process.run('experiments.py', jobs)
+    else:
+        raise RuntimeError('Unknown scheduler: %s' % config.SCHEDULER)
 
 def pretty_print(structure):
     return grammar.pretty_print(structure, False, False)
 
-def run_initial_samples(name, level, aux):
+def initial_samples_jobs(name, level):
     if level == 1:
         raise RuntimeError('No need for initialization in level 1.')
 
@@ -516,43 +515,49 @@ def run_initial_samples(name, level, aux):
     winning_structures = filter(lambda s: compute_improvement(name, level-1, s) > 1.,
                                 winning_structures)
 
-    params = get_params(name)
+    params = storage.load(params_file(name))
 
-    jobs = ['init_job %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
+    jobs = ["init_job %s %d '%s' %d %d" % (name, level, pretty_print(s), split_id, sample_id)
             for s in winning_structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
 
-    key = name + '-init-' + level
-    schedule_mod.run('experiments.py', jobs, key=key, **aux)
+    return jobs
 
-def run_evaluation(name, level, aux):
-    params = get_params(name)
+def initial_samples_key(name, level):
+    return '%s_init_%d' % (name, level)
+
+def evaluation_jobs(name, level):
+    params = storage.load(params_file(name))
     structures = storage.load(structures_file(name, level))
     
-    jobs = ['eval_job %s %d %s %s %d %d' %
+    return ["eval_job %s %d '%s' '%s' %d %d" %
             (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
             for init_s, s in structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
 
-    key = name + '-' + level
-    schedule_mod.run('experiments.py', jobs, key=key, **aux)
+def evaluation_key(name, level):
+    return '%s_eval_%d' % (name, level)
 
-def run_final_model(name, num_levels, aux):
-    params = get_params(name)
+def final_model_jobs(name, num_levels):
+    params = storage.load(params_file(name))
     
-    jobs = ['final_job %s %d %d' % (name, num_levels, i) for i in range(params.num_samples)]
+    return ["final_job %s %d %d" % (name, num_levels, i) for i in range(params.num_samples)]
 
-    key = name + '-final'
-    schedule_mod.run('experiments.py', jobs, key=key, **aux)
+def final_model_key(name):
+    return '%s_final' % name
 
-def run_everything(name, num_levels, aux):
-    run_evaluation(name, 1, aux)
+def run_everything(name, num_levels, args):
+    init_level(name, 1)
+    run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
+    collect_scores_for_level(name, 1)
     for level in range(2, num_levels + 1):
-        run_initial_samples(name, level, aux)
-        run_evaluation(name, level, aux)
-    run_final_model(name, num_levels, aux)
+        init_level(name, level)
+        run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
+        run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
+        collect_scores_for_level(name, level)
+    run_jobs(final_model_jobs(name, level), args, final_model_key(name, level))
 
 
 ###################### summarizing the results #################################
@@ -665,7 +670,7 @@ def fit_sequence(name, sequence):
 
 
 def average_running_time(name, level, structure):
-    params = get_params(name)
+    params = storage.load(params_file(name))
     total = 0.
     for i in range(params.num_splits):
         for j in range(params.num_samples):
@@ -673,6 +678,16 @@ def average_running_time(name, level, structure):
             total += float(storage.load(rtf))
     return total / float(params.num_samples * params.num_splits)
 
+
+
+def add_scheduler_args(parser):
+    if config.SCHEDULER == 'parallel':
+        parser.add_argument('--machines', type=str, default=':')
+        parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
+    elif config.SCHEDULER == 'single_process':
+        pass
+    else:
+        raise RuntimeError('Unknown scheduler: %s' % config.SCHEDULER)
 
 
 if __name__ == '__main__':
@@ -683,14 +698,12 @@ if __name__ == '__main__':
     if command == 'init':
         parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
-        if config.SCHEDULER == 'parallel':
-            parser.add_argument('--machines', type=str, default=':')
-            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
-            args = parser.parse_args()
-            run_initial_samples(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
-        else:
-            args = parser.parse_args()
-            run_initial_samples(args.name, args.level, {})
+        add_scheduler_args(parser)
+        args = parser.parse_args()
+        init_level(args.name, args.level)
+        if args.level > 1:
+            run_jobs(initial_samples_jobs(args.name, args.level), args,
+                     initial_samples_key(args.name, args.level))
 
     elif command == 'init_job':
         parser.add_argument('name', type=str)
@@ -705,18 +718,14 @@ if __name__ == '__main__':
     elif command == 'eval':
         parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
-        if config.SCHEDULER == 'parallel':
-            parser.add_argument('--machines', type=str, default=':')
-            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
-            args = parser.parse_args()
-            run_evaluation(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
-        else:
-            args = parser.parse_args()
-            run_evaluation(args.name, args.level, {})
+        add_scheduler_args(parser)
+        args = parser.parse_args()
+        run_jobs(evaluation_jobs(args.name, args.level), args, evaluation_key(args.name, args.level))
+        collect_scores_for_level(args.name, args.level)
 
     elif command == 'eval_job':
         parser.add_argument('name', type=str)
-        parser.add_argument('level', type=str)
+        parser.add_argument('level', type=int)
         parser.add_argument('init_structure', type=str)
         parser.add_argument('structure', type=str)
         parser.add_argument('split_id', type=int)
@@ -728,14 +737,9 @@ if __name__ == '__main__':
     elif command == 'final':
         parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
-        if config.SCHEDULER == 'parallel':
-            parser.add_argument('--machines', type=str, default=':')
-            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
-            args = parser.parse_args()
-            run_final_model(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
-        else:
-            args = parser.parse_args()
-            run_final_model(args.name, args.level, {})
+        add_scheduler_args(parser)
+        args = parser.parse_args()
+        run_jobs(final_model_jobs(args.name, args.level), args, final_model_key(args.name, args.level))
 
     elif command == 'final_job':
         parser.add_argument('name', type=str)
@@ -747,14 +751,9 @@ if __name__ == '__main__':
     elif command == 'everything':
         parser.add_argument('name', type=str)
         parser.add_argument('num_levels', type=int)
-        if config.SCHEDULER == 'parallel':
-            parser.add_argument('--machines', type=str, default=':')
-            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
-            args = parser.parse_args()
-            run_everything(args.name, args.num_levels, {'machines': args.machines, 'njobs': args.njobs})
-        else:
-            args = parser.parse_args()
-            run_everything(args.name, args.num_levels, {})
+        add_scheduler_args(parser)
+        args = parser.parse_args()
+        run_everything(args.name, args.num_levels, args)
 
     else:
         raise RuntimeError('Unknown command: %s' % command)

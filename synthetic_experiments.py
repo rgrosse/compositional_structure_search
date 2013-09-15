@@ -1,10 +1,13 @@
+import argparse
 import numpy as np
 nax = np.newaxis
 import os
+import sys
 
 import config
 import experiments
 import observations
+
 
 NUM_ROWS = 200
 NUM_COLS = 200
@@ -117,63 +120,121 @@ def generate_data(data_str, nrows, ncols, ncomp, return_components=False):
         return data
 
 
+NOISE_STR_VALUES = ['0.1', '1.0', '3.0', '10.0']
 ALL_MODELS = ['pmf', 'mog', 'ibp', 'chain', 'irm', 'bmf', 'kf', 'bctf', 'sparse', 'gsm']
 
 
-def init_experiment():
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
+def experiment_name(noise_str, model):
+    return 'synthetic_%s_%s' % (noise_str, model)
+
+def all_experiment_names():
+    return [experiment_name(noise_str, model)
+            for noise_str in NOISE_STR_VALUES
+            for model in ALL_MODELS
+            ]
+
+def initial_samples_jobs(level):
+    return reduce(list.__add__, [experiments.initial_samples_jobs(name, level)
+                                 for name in all_experiment_names()])
+
+def initial_samples_key(level):
+    return 'synthetic_init_%d' % level
+
+def evaluation_jobs(level):
+    return reduce(list.__add__, [experiments.evaluation_jobs(name, level)
+                                 for name in all_experiment_names()])
+
+def evaluation_key(level):
+    return 'synthetic_eval_%d' % level
+
+def final_model_jobs(level):
+    return reduce(list.__add__, [experiments.final_model_jobs(name, level)
+                                 for name in all_experiment_names()])
+
+def final_model_key():
+    return 'synthetic_final'
+
+
+def init_experiment(debug):
+    for noise_str in NOISE_STR_VALUES:
         for model in ALL_MODELS:
-            name = 'synthetic/%s/%s' % (condition, model)
-            print condition, model
+            name = experiment_name(noise_str, model)
+            if debug:
+                params = experiments.DebugParams()
+            else:
+                params = experiments.SmallParams()
             data, components = generate_data(model, NUM_ROWS, NUM_COLS, NUM_COMPONENTS, True)
             clean_data_matrix = observations.DataMatrix.from_real_values(data)
-            noise_var = float(condition)
+            noise_var = float(noise_str)
             noisy_data = np.random.normal(data, np.sqrt(noise_var))
             data_matrix = observations.DataMatrix.from_real_values(noisy_data)
-            experiments.init_experiment(name, data_matrix, components, clean_data_matrix=clean_data_matrix)
+            experiments.init_experiment(name, data_matrix, params, components,
+                                        clean_data_matrix=clean_data_matrix)
         
-def init_level(level, override=False):
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
-        for model in ALL_MODELS:
-            print condition, model
-            experiments.init_level('synthetic/%s/%s' % (condition, model), level, override=override)
+def init_level(level):
+    for name in all_experiment_names():
+        experiments.init_level(name, level)
 
 def collect_scores_for_level(level):
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
-        for model in ALL_MODELS:
-            print condition, model
-            experiments.collect_scores_for_level('synthetic/%s/%s' % (condition, model), level)
+    for name in all_experiment_names():
+        experiments.collect_scores_for_level(name, level)
+
+def run_everything(name, num_levels, args):
+    init_level(name, 1)
+    experiments.run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
+    for level in range(2, num_levels + 1):
+        init_level(name, level)
+        experiments.run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
+        experiments.run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
+        collect_scores_for_level(name, level)
+    experiments.run_jobs(final_model_jobs(name, level), args, final_model_key(name, level))
 
 
 
-def write_jobs_init(level):
-    if level == 1:
-        raise RuntimeError('No need for initialization for level 1.')
-    jobs = []
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
-        for model in ALL_MODELS:
-            name = 'synthetic/%s/%s' % (condition, model)
-            winning_models = experiments.list_winning_models(name, level - 1)
-            if winning_models[-1] == '---':
-                continue
-            jobs += experiments.list_init_jobs(name, level)
-    experiments.write_jobs(jobs, os.path.join(config.JOBS_PATH, 'synthetic/jobs.txt'))
 
-def write_jobs_for_level(level):
-    jobs = []
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
-        for model in ALL_MODELS:
-            name = 'synthetic/%s/%s' % (condition, model)
-            if level > 1:
-                winning_models = experiments.list_winning_models(name, level - 1)
-                if winning_models[-1] == '---':
-                    continue
-            jobs += experiments.list_jobs(name, level)
-    experiments.write_jobs(jobs, os.path.join(config.JOBS_PATH, 'synthetic/jobs.txt'))
+if __name__ == '__main__':
+    command = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('command')
 
-def write_jobs_failed(level):
-    jobs = []
-    for condition in ['0.1', '1.0', '3.0', '10.0']:
-        for model in ALL_MODELS:
-            jobs += experiments.list_jobs_failed('synthetic/%s/%s' % (condition, model), level)
-    experiments.write_jobs(jobs, os.path.join(config.JOBS_PATH, 'synthetic/jobs.txt'))
+    if command == 'generate':
+        parser.add_argument('--debug', action='store_true', default=False)
+        args = parser.parse_args()
+        init_experiment(args.debug)
+
+    elif command == 'init':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        experiments.add_scheduler_args(parser)
+        args = parser.parse_args()
+        init_level(args.name, args.level)
+        if args.level > 1:
+            experiments.run_jobs(initial_samples_jobs(args.name, args.level), args,
+                                 initial_samples_key(args.name, args.level))
+
+    elif command == 'eval':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        experiments.add_scheduler_args(parser)
+        args = parser.parse_args()
+        experiments.run_jobs(evaluation_jobs(args.name, args.level), args,
+                             evaluation_key(args.name, args.level))
+        collect_scores_for_level(args.name, args.level)
+
+    elif command == 'final':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        experiments.add_scheduler_args(parser)
+        args = parser.parse_args()
+        experiments.run_jobs(final_model_jobs(args.name, args.level), args,
+                             final_model_key(args.name, args.level))
+
+    elif command == 'everything':
+        parser.add_argument('name', type=str)
+        parser.add_argument('num_levels', type=int)
+        experiments.add_scheduler_args(parser)
+        args = parser.parse_args()
+        run_everything(args.name, args.num_levels, args)
+
+    else:
+        raise RuntimeError('Unknown command: %s' % command)
