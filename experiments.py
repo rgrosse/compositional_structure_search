@@ -2,6 +2,7 @@ import matplotlib
 if __name__ == '__main__':
     matplotlib.use('agg')
 
+import argparse
 import hashlib
 import numpy as np
 nax = np.newaxis
@@ -16,6 +17,13 @@ import observations
 import recursive
 import scoring
 from utils import storage
+
+import single_process
+import parallel
+if config.SCHEDULER == 'single_process':
+    schedule_mod = single_process
+elif config.SCHEDULER == 'parallel':
+    schedule_mod = parallel
 
 
 ####################### parameters #############################################
@@ -500,7 +508,7 @@ def sequence_of_structures(name, num_levels):
 def pretty_print(structure):
     return grammar.pretty_print(structure, False, False)
 
-def list_init_jobs(name, level):
+def run_initial_samples(name, level, aux):
     if level == 1:
         raise RuntimeError('No need for initialization in level 1.')
 
@@ -509,61 +517,42 @@ def list_init_jobs(name, level):
                                 winning_structures)
 
     params = get_params(name)
-    return ['init %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
+
+    jobs = ['init_job %s %d %s %d %d' % (name, level, pretty_print(s), split_id, sample_id)
             for s in winning_structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
 
-def list_jobs(name, level):
-    # TODO: only those structures for which there was improvement
-##     if level > 1:
-##         winning_models = list_winning_models(name, level-1)
-##         if winning_models[-1] == '---':
-##             return []
-    
+    key = name + '-init-' + level
+    schedule_mod.run('experiments.py', jobs, key=key, **aux)
+
+def run_evaluation(name, level, aux):
     params = get_params(name)
     structures = storage.load(structures_file(name, level))
-    return ['run %s %d %s %s %d %d' %
+    
+    jobs = ['eval_job %s %d %s %s %d %d' %
             (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
             for init_s, s in structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
 
-def list_jobs_failed(name, level):
-    if level > 1:
-        winning_models = list_winning_models(name, level-1)
-        if winning_models[-1] == '---':
-            return []
-    
+    key = name + '-' + level
+    schedule_mod.run('experiments.py', jobs, key=key, **aux)
+
+def run_final_model(name, num_levels, aux):
     params = get_params(name)
-    #structures = cPickle.load(open(structures_file(name, level)))
-    structures = storage.load(structures_file(name, level))
-
-    jobs = []
-    for init_s, s in structures:
-        for split_id in range(params.num_splits):
-            for sample_id in range(params.num_samples):
-                if not os.path.exists(scores_file(name, level, s, split_id, sample_id)):
-                    jobs.append(('run', name, level, init_s, s, split_id, sample_id))
-                    
-    return jobs
-
-
-            
-        
-
     
+    jobs = ['final_job %s %d %d' % (name, num_levels, i) for i in range(params.num_samples)]
 
-def list_winner_jobs(name, num_levels):
-    params = get_params(name)
-    return ['winner %s %d %d' % (name, num_levels, i) for i in range(params.num_samples)]
+    key = name + '-final'
+    schedule_mod.run('experiments.py', jobs, key=key, **aux)
 
-def write_jobs(jobs, fname):
-    outstr = open(os.path.join(config.JOBS_PATH, fname), 'w')
-    for j in jobs:
-        print >> outstr, j
-    outstr.close()
-
+def run_everything(name, num_levels, aux):
+    run_evaluation(name, 1, aux)
+    for level in range(2, num_levels + 1):
+        run_initial_samples(name, level, aux)
+        run_evaluation(name, level, aux)
+    run_final_model(name, num_levels, aux)
 
 
 ###################### summarizing the results #################################
@@ -687,24 +676,88 @@ def average_running_time(name, level, structure):
 
 
 if __name__ == '__main__':
-    print ' '.join(sys.argv)
-    print sys.argv
-    print 'Machine:', os.uname()[1]
-    cmd = sys.argv[1]
-    if cmd == 'init':
-        name, level, structure_, split_id, sample_id = sys.argv[2], int(sys.argv[3]), sys.argv[4], int(sys.argv[5]), \
-                                                       int(sys.argv[6])
-        structure = grammar.parse(structure_)
-        compute_init_samples(name, level, structure, split_id, sample_id)
-    elif cmd == 'run':
-        name, level, init_structure_, structure_, split_id, sample_id = sys.argv[2], int(sys.argv[3]), sys.argv[4], \
-                                                                        sys.argv[5], int(sys.argv[6]), int(sys.argv[7])
-        init_structure = grammar.parse(init_structure_)
-        structure = grammar.parse(structure_)
-        run_model(name, level, init_structure, structure, split_id, sample_id)
-    elif cmd == 'winner':
-        name, num_levels, sample_id = sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-        fit_winning_sequence(name, num_levels, sample_id)
+    command = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('command')
 
+    if command == 'init':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        if config.SCHEDULER == 'parallel':
+            parser.add_argument('--machines', type=str, default=':')
+            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
+            args = parser.parse_args()
+            run_initial_samples(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
+        else:
+            args = parser.parse_args()
+            run_initial_samples(args.name, args.level, {})
 
+    elif command == 'init_job':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        parser.add_argument('structure', type=str)
+        parser.add_argument('split_id', type=int)
+        parser.add_argument('sample_id', type=int)
+        args = parser.parse_args()
+        compute_init_samples(args.name, args.level, grammar.parse(args.structure),
+                             args.split_id, args.sample_id)
+
+    elif command == 'eval':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        if config.SCHEDULER == 'parallel':
+            parser.add_argument('--machines', type=str, default=':')
+            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
+            args = parser.parse_args()
+            run_evaluation(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
+        else:
+            args = parser.parse_args()
+            run_evaluation(args.name, args.level, {})
+
+    elif command == 'eval_job':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=str)
+        parser.add_argument('init_structure', type=str)
+        parser.add_argument('structure', type=str)
+        parser.add_argument('split_id', type=int)
+        parser.add_argument('sample_id', type=int)
+        args = parser.parse_args()
+        run_model(args.name, args.level, grammar.parse(args.init_structure), grammar.parse(args.structure),
+                  args.split_id, args.sample_id)
+
+    elif command == 'final':
+        parser.add_argument('name', type=str)
+        parser.add_argument('level', type=int)
+        if config.SCHEDULER == 'parallel':
+            parser.add_argument('--machines', type=str, default=':')
+            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
+            args = parser.parse_args()
+            run_final_model(args.name, args.level, {'machines': args.machines, 'njobs': args.njobs})
+        else:
+            args = parser.parse_args()
+            run_final_model(args.name, args.level, {})
+
+    elif command == 'final_job':
+        parser.add_argument('name', type=str)
+        parser.add_argument('num_levels', type=int)
+        parser.add_argument('sample_id', type=int)
+        args = parser.parse_args()
+        fit_winning_sequence(args.name, args.num_levels, args.sample_id)
+
+    elif command == 'everything':
+        parser.add_argument('name', type=str)
+        parser.add_argument('num_levels', type=int)
+        if config.SCHEDULER == 'parallel':
+            parser.add_argument('--machines', type=str, default=':')
+            parser.add_argument('--njobs', type=int, default=config.DEFAULT_NUM_JOBS)
+            args = parser.parse_args()
+            run_everything(args.name, args.num_levels, {'machines': args.machines, 'njobs': args.njobs})
+        else:
+            args = parser.parse_args()
+            run_everything(args.name, args.num_levels, {})
+
+    else:
+        raise RuntimeError('Unknown command: %s' % command)
+
+        
 
