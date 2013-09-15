@@ -26,6 +26,7 @@ class DefaultParams:
     num_expand = 3                 # Number of models to expand in each round
     num_steps_ais = 2000           # Number of AIS steps for GSM models
     save_samples = False           # Whether to save the posterior samples (can take up lots of disk space)
+    gibbs_steps = 200              # Number of Gibbs steps for sampling from the posterior
 
     def __setattr__(self, k, v):
         """Make sure the field already exists, to catch typos."""
@@ -51,65 +52,80 @@ def md5(obj):
     return hashlib.md5(str(obj)).hexdigest()
 
 def experiment_dir(name):
+    """Main directory used for all structure search results."""
     basedir = os.path.join(config.RESULTS_PATH, 'predictive')
     return os.path.join(basedir, name)
+
 def data_file(name):
+    """The original data matrix, stored as an observations.DataMatrix instance."""
     return os.path.join(experiment_dir(name), 'data.pickle')
+
 def splits_file(name):
+    """The cross-validation splits, stored as a list of (train_rows, train_cols,
+    test_rows, test_cols) tuples."""
     return os.path.join(experiment_dir(name), 'splits.pickle')
+
 def clean_data_file(name):
+    """The observation matrix before noise was added, if applicable."""
     return os.path.join(experiment_dir(name), 'clean-data.pickle')
+
 def components_file(name):
+    """The true decomposition, as a recursive.Decomp instance, if applicable."""
     return os.path.join(experiment_dir(name), 'components.pickle')
+
 def level_dir(name, level):
+    """The directory containing the results of one level of the search."""
     return os.path.join(experiment_dir(name), 'level%d' % level)
+
 def structures_file(name, level):
+    """The list of all structures to be evaluated in a given level of the search.
+    Stored as a list of (init_structure, successor_structure) pairs."""
     return os.path.join(level_dir(name, level), 'structures.pickle')
+
 def init_samples_file(name, level, structure, split_id, sample_id):
+    """The decomposition to be used as the initialization for a given structure, i.e.
+    one of the top performing structures from the previous level."""
     return os.path.join(level_dir(name, level), 'init', 'samples-%s-%d-%d.pickle' % (grammar.pretty_print(structure, False, False),
                                                                                      split_id, sample_id))
+
 def init_scores_file(name, level, structure, split_id, sample_id):
+    """The row and column log-likelihood scores for the model used as an initialization.
+    Stored as a (row_log_likelihood, column_log_likelihood) pair, where each is a vector
+    giving the performance on all the test rows/columns."""
     return os.path.join(level_dir(name, level), 'init', 'scores-%s-%d-%d.pickle' % (grammar.pretty_print(structure, False, False),
                                                                                     split_id, sample_id))
+
 def samples_file(name, level, structure, split_id, sample_id):
+    """A posterior sample for a given structure."""
     return os.path.join(config.CACHE_PATH, 'predictive', name, 'level%d' % level,
                         grammar.pretty_print(structure, False, False),
                         'samples-%d-%d.pickle' % (split_id, sample_id))
+
 def scores_file(name, level, structure, split_id, sample_id):
+    """The predictive log-likelihood scores on held-out data for a given CV split."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
                         'scores-%d-%d.pickle' % (split_id, sample_id))
+
 def collected_scores_file(name, level, structure):
+    """The predictive log-likelihood scores for a given structure, collected over all CV
+    splits and ordered by the indices in the original data matrix."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
                         'collected-scores.pickle')
+
 def winning_structure_file(name, level):
+    """The highest performing structure at a given level of the search."""
     return os.path.join(level_dir(name, level), 'winning-structure.pickle')
+
 def running_time_file(name, level, structure, split_id, sample_id):
+    """The running time for sampling from the posterior and computing predictive likelihood."""
     return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
                         'time-%d-%d.pickle' % (split_id, sample_id))
+
 def winning_samples_file(name, sample_id):
+    """Posterior samples from each model in the sequence chosen by the structure search."""
     return os.path.join(experiment_dir(name), 'winning-samples-%d.pickle' % sample_id)
-def winning_training_scores_file(name, sample_id):
-    return os.path.join(experiment_dir(name), 'winning-training-scores-%d.pickle' % sample_id)
-
-def all_directories(name, level, structures):
-    dirs = [level_dir(name, level)]
-    dirs.append(os.path.join(level_dir(name, level), 'init'))
-    for structure in structures:
-        dirs.append(os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False)))
-    return dirs
 
 
-def create_directory(path):
-    idx = 0
-    while True:
-        try:
-            idx = path.index('/', idx+1)
-        except ValueError:
-            break
-        if not os.path.exists(path[:idx]):
-            os.mkdir(path[:idx])
-    if not os.path.exists(path):
-        os.mkdir(path)
 
 def get_params(name):
     if name.find('synthetic') != -1:
@@ -136,13 +152,10 @@ def get_params(name):
 
 ############################# initialization ###################################
 
-def is_list_of_pairs(structures):
-    # temporary (changed structures_file to be a list of init_structure, structure pairs,
-    # but need to deal with the old versions where it's still a list of structures)
-    return type(structures[0]) == tuple and len(structures[0]) == 2
-
 
 def nfold_cv(nrows, ncols, nsplits):
+    """Randomly split the row and column indices into folds, where one of the
+    folds is used as test data in each of the splits."""
     rowperm = np.random.permutation(nrows)
     colperm = np.random.permutation(ncols)
     splits = []
@@ -156,13 +169,15 @@ def nfold_cv(nrows, ncols, nsplits):
 
 
 def init_experiment(name, data_matrix, components=None, override=False, clean_data_matrix=None):
+    """Initialize the structure search by saving the matrix, and possibly auxiliary
+    information, to files, and generating cross-validation splits."""
     if os.path.exists(experiment_dir(name)) and not override:
         raise RuntimeError('Experiment %s already initialized.' % name)
-    create_directory(experiment_dir(name))
+    if not os.path.exists(experiment_dir(name)):
+        os.mkdir(experiment_dir(name))
     
     params = get_params(name)
     splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
-    #cPickle.dump(splits, open(splits_file(name), 'w'), protocol=2)
     storage.dump(splits, splits_file(name))
 
     if clean_data_matrix is not None:
@@ -175,6 +190,9 @@ def init_experiment(name, data_matrix, components=None, override=False, clean_da
     
 
 def list_structure_pairs(init_structures):
+    """Expand all of a set of structures. Returns a list of (init_structure, successor_structure) pairs.
+    If a structure is a successor to multiple structures in the previous level, keep only the
+    best-performing one."""
     pairs = []
     next_structures = set()
     for s in init_structures:
@@ -187,6 +205,8 @@ def list_structure_pairs(init_structures):
 
 
 def init_level(name, level, override=False):
+    """Initialize a given level of the search by saving all of the structures which need
+    to be evaluated."""
     if not os.path.exists(experiment_dir(name)):
         raise RuntimeError('Experiment %s not yet initialized.' % name)
     if os.path.exists(level_dir(name, level)) and not override:
@@ -195,47 +215,23 @@ def init_level(name, level, override=False):
     if level == 1:
         init_structures = ['g']
     else:
-        #init_structure = winning_structure(name, level - 1)
         init_structures = storage.load(winning_structure_file(name, level - 1))
-    #structures = grammar.list_successors(init_structure)
     structure_pairs = list_structure_pairs(init_structures)
     storage.dump(structure_pairs, structures_file(name, level))
 
 
-def collect_scores_for_level(name, level):
-    # TODO
-    #if level > 1:
-    #    winning_models = list_winning_models(name, level-1)
-    #    if winning_models[-1] == '---':
-    #        return
-    
-    structures = storage.load(structures_file(name, level))
-    #if type(structures[0]) == tuple:
-    if is_list_of_pairs(structures):
-        structures = [s for _, s in structures]
-
-    
-    for s in structures:
-        collect_scores(name, level, s)
-    save_winning_structures(name, level)
 
 
 
 
 ######################## the actual computation ################################
 
-def load_data(name):
-    data_matrix = storage.load(data_file(name))
-    assert isinstance(data_matrix, recursive.Decomp) or isinstance(data_matrix, observations.DataMatrix)
-    if isinstance(data_matrix, recursive.Decomp):
-        data_matrix = observations.DataMatrix.from_decomp(data_matrix)
-    return data_matrix
 
 
-TEMP_GIBBS_STEPS = 200 # temporary
 def sample_from_model(name, level, init_structure, structure, split_id, sample_id):
+    """Run an MCMC sampler to approximately sample from the posterior."""
     params = get_params(name)
-    data_matrix = load_data(name)
+    data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
     
@@ -252,9 +248,10 @@ def sample_from_model(name, level, init_structure, structure, split_id, sample_i
         if isinstance(prev_model, recursive.Decomp):
             prev_model = prev_model.root
 
-    return recursive.fit_model(structure, X_train, prev_model, gibbs_steps=TEMP_GIBBS_STEPS)
+    return recursive.fit_model(structure, X_train, prev_model, gibbs_steps=params.gibbs_steps)
 
 def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
+    """Given a posterior sample, evaluate the predictive likelihood on the test rows and columns."""
     params = get_params(name)
     data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
@@ -274,17 +271,14 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
             init_row_loglik, init_col_loglik = storage.load(init_scores_file(name, level, init_structure,
                                                                              split_id, sample_id))
 
-    if 'num-steps-ais' in params:
-        num_steps = params.num_steps_ais
-    else:
-        num_steps = 2000
     row_loglik, col_loglik = scoring.evaluate_model(X_train, root, X_row_test, X_col_test,
                                                     init_row_loglik=init_row_loglik,
                                                     init_col_loglik=init_col_loglik,
-                                                    num_steps=num_steps)
+                                                    num_steps=params.num_steps_ais)
     return row_loglik, col_loglik
 
 def run_model(name, level, init_structure, structure, split_id, sample_id, save=True, save_sample=False):
+    """Sample from the posterior given the training data, and evaluate on heldout rows/columns."""
     params = get_params(name)
     t0 = time.time()
     root = sample_from_model(name, level, init_structure, structure, split_id, sample_id)
@@ -301,12 +295,15 @@ def run_model(name, level, init_structure, structure, split_id, sample_id, save=
 
 
 def compute_init_samples(name, level, structure, split_id, sample_id):
+    """For one of the high-performing structures in the previous level, sample from the posterior
+    so that it can be used to initialize the current level. This is only needed if
+    params.save_samples == False. The log-likelihood scores are saved as well for purposes
+    of determining statistical significance of the improvement over the previous level."""
     if level == 1:
         return
 
     init_structure = init_structure_for(name, level-1, structure)
 
-    #structure = storage.load(winning_structure_file(name, level-1))
     root = sample_from_model(name, level-1, init_structure, structure, split_id, sample_id)
     storage.dump(root, init_samples_file(name, level, structure, split_id, sample_id))
     row_loglik, col_loglik = evaluate_decomp(name, level-1, init_structure, split_id, sample_id, root)
@@ -314,14 +311,11 @@ def compute_init_samples(name, level, structure, split_id, sample_id):
 
 def fit_winning_sequence(name, num_levels, sample_id):
     """After the sequence of models is identified, sample factorizations from each of the models on the full
-    data matrix. Compute the TRAINING predictive likelihood of each sample (nothing is left to be held out)
-    in order to choose one that wasn't stuck in a local optimum."""
-    #data_matrix = storage.load(data_file(name))
-    data_matrix = load_data(name)
+    data matrix."""
+    data_matrix = storage.load(data_file(name))
     sequence = sequence_of_structures(name, num_levels)
     params = get_params(name)
     decomps = recursive.fit_sequence(sequence, data_matrix, params.k)
-    #cPickle.dump(decomps, open(winning_samples_file(name, sample_id), 'w'), protocol=2)
     storage.dump(decomps, winning_samples_file(name, sample_id))
 
 
@@ -355,6 +349,7 @@ class PredictiveLikelihoodScores:
 
 
 def structureless_scores(name):
+    """Evaluate the probability of the structureless model G on held-out data."""
     data_matrix = storage.load(data_file(name))
     if isinstance(data_matrix, recursive.Decomp):
         data_matrix = observations.DataMatrix.from_real_values(data_matrix.root.value())
@@ -379,7 +374,20 @@ def structureless_scores(name):
 
     return PredictiveLikelihoodScores(row_loglik, col_loglik, num_entries)
 
+def collect_scores_for_level(name, level):
+    """Collect the held-out predictive log-likelihood scores for all CV splits and
+    order them according to the indices of the original data matrix."""
+    structures = storage.load(structures_file(name, level))
+    structures = [s for _, s in structures]
+    
+    for s in structures:
+        collect_scores(name, level, s)
+    save_winning_structures(name, level)
+
+
 def collect_scores(name, level, structure):
+    """Collect the held-out predictive log-likelihood scores for all CV splits and
+    order them according to the indices of the original data matrix."""
     params = get_params(name)
     splits = storage.load(splits_file(name))
 
@@ -410,6 +418,8 @@ def collect_scores(name, level, structure):
 
 
 def compute_scores(name, level, structure):
+    """Average together the predictive likelihood scores over all the posterior samples,
+    and return a PredictiveLikelihoodScores instance."""
     if level == 0:
         if structure != 'g': raise RuntimeError('Invalid structure for level 0: %s' % structure)
         return structureless_scores(name)
@@ -436,6 +446,7 @@ def compute_scores(name, level, structure):
 
 
 def init_structure_for(name, level, structure):
+    """Determine which of the previous level's structures was used to initialize a given structure."""
     if level == 1:
         return 'g'
     structure_pairs = storage.load(structures_file(name, level))
@@ -448,15 +459,13 @@ def init_structure_for(name, level, structure):
 
 
 def winning_structures(name, level):
+    """Determine the set of structures to expand."""
     if level == 0:
         return ['g']
     params = get_params(name)
     structures = storage.load(structures_file(name, level))
-    #if type(structures[0]) == tuple:
-    if is_list_of_pairs(structures):
-        structures = [s for _, s in structures]
+    structures = [s for _, s in structures]
     structures = filter(lambda s: compute_scores(name, level, s) is not None, structures)    # ignore failures
-    #return max(structures, key=lambda s: compute_scores(name, level, s).total())
     structures.sort(key=lambda s: compute_scores(name, level, s).total(), reverse=True)
     return structures[:params.num_expand]
 
@@ -464,6 +473,7 @@ def save_winning_structures(name, level):
     storage.dump(winning_structures(name, level), winning_structure_file(name, level))
 
 def compute_improvement(name, level, structure=None):
+    """Compute the improvement in predictive likelihood score from one level to the next."""
     if structure is None:
         structure = storage.load(winning_structure_file(name, level))
         if type(structure) == list:
@@ -474,23 +484,14 @@ def compute_improvement(name, level, structure=None):
     return (curr_scores.row_avg() - prev_scores.row_avg() + curr_scores.col_avg() - prev_scores.col_avg()) / 2.
 
 def sequence_of_structures(name, num_levels):
+    """Get the sequence of structures corresponding to the final model chosen, i.e. a list
+    of structures where each one was used to initialize the next one."""
     sequence = []
     for level in range(1, num_levels+1):
         if compute_improvement(name, level) < 1.:
             break
         sequence.append(storage.load(winning_structures(name, level)[0]))
     return sequence
-
-def pick_winning_sample(name):
-    params = get_params(name)
-    scores = np.zeros(params.num_samples)
-    for sample_id in range(params.num_samples):
-        curr_scores = storage.load(winning_training_scores_file(name, sample_id))
-        row_loglik, col_loglik = curr_scores[-1]
-        scores[sample_id] = np.sum(row_loglik) + np.sum(col_loglik)
-    print scores
-    return np.argmax(scores)
-
 
 
 
@@ -502,10 +503,6 @@ def pretty_print(structure):
 def list_init_jobs(name, level):
     if level == 1:
         raise RuntimeError('No need for initialization in level 1.')
-
-    #winning_models = list_winning_models(name, level-1)
-    #if winning_models[-1] == '---':
-    #    return []
 
     winning_structures = storage.load(winning_structure_file(name, level-1))
     winning_structures = filter(lambda s: compute_improvement(name, level-1, s) > 1.,
@@ -620,9 +617,7 @@ def list_winning_models(name, num_levels, latex=False):
 def print_scores(name, level):
     #structures = cPickle.load(open(structures_file(name, level)))
     structures = storage.load(structures_file(name, level))
-    #if type(structures[0]) == tuple:
-    if is_list_of_pairs(structures):
-        structures = [s for _, s in structures]
+    structures = [s for _, s in structures]
     scores = {}
     for s in structures:
         result = compute_scores(name, level, s)
@@ -655,7 +650,7 @@ def print_scores(name, level):
 ##     recursive.print_clusters(orig_data, decomps[-1])
 
 def print_clusters(name, level, init_structure, structure, split_id, sample_id):
-    data_matrix = load_data(name)
+    data_matrix = storage.load(data_file(name))
     splits = storage.load(splits_file(name))
     train_rows, train_cols, test_rows, test_cols = splits[split_id]
     
@@ -667,7 +662,7 @@ def print_clusters(name, level, init_structure, structure, split_id, sample_id):
 
 def print_clusters2(name, sequence):
     sequence = map(grammar.parse, sequence)
-    data_matrix = load_data(name)
+    data_matrix = storage.load(data_file(name))
     temp = recursive.fit_sequence(sequence, data_matrix)
     root = temp[-1]
     recursive.print_clusters(data_matrix, root)
@@ -675,7 +670,7 @@ def print_clusters2(name, sequence):
 
 def fit_sequence(name, sequence):
     sequence = map(grammar.parse, sequence)
-    data_matrix = load_data(name)
+    data_matrix = storage.load(data_file(name))
     return recursive.fit_sequence(sequence, data_matrix)
 
 
