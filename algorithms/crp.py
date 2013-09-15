@@ -349,7 +349,7 @@ def fit_model(data_matrix, isotropic_w=True, isotropic_b=True, num_iter=NUM_ITER
     N, D = X_init.shape
 
     k_init = min(N//4, 40)
-    km = sklearn.cluster.KMeans(k=k_init)
+    km = sklearn.cluster.KMeans(n_clusters=k_init)
     km.fit(X_init)
     init_assignments = km.labels_
 
