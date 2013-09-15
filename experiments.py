@@ -60,7 +60,7 @@ class LargeParams(DefaultParams):
 
 class DebugParams(DefaultParams):
     """Parameter settings for debugging, so you can quickly run jobs and make sure they don't crash"""
-    num_splits = 5
+    num_splits = 2
     num_samples = 2
     num_expand = 1
     num_steps_ais = 20
@@ -109,32 +109,29 @@ def structures_file(name, level):
 def init_samples_file(name, level, structure, split_id, sample_id):
     """The decomposition to be used as the initialization for a given structure, i.e.
     one of the top performing structures from the previous level."""
-    return os.path.join(level_dir(name, level), 'init', 'samples-%s-%d-%d.pk' % (grammar.pretty_print(structure, False, False),
-                                                                                     split_id, sample_id))
+    return os.path.join(level_dir(name, level), 'init',
+                        'samples-%s-%d-%d.pk' % (md5(structure), split_id, sample_id))
 
 def init_scores_file(name, level, structure, split_id, sample_id):
     """The row and column log-likelihood scores for the model used as an initialization.
     Stored as a (row_log_likelihood, column_log_likelihood) pair, where each is a vector
     giving the performance on all the test rows/columns."""
-    return os.path.join(level_dir(name, level), 'init', 'scores-%s-%d-%d.pk' % (grammar.pretty_print(structure, False, False),
-                                                                                    split_id, sample_id))
+    return os.path.join(level_dir(name, level), 'init',
+                        'scores-%s-%d-%d.pk' % (md5(structure), split_id, sample_id))
 
 def samples_file(name, level, structure, split_id, sample_id):
     """A posterior sample for a given structure."""
-    return os.path.join(config.CACHE_PATH,  name, 'level%d' % level,
-                        grammar.pretty_print(structure, False, False),
-                        'samples-%d-%d.pk' % (split_id, sample_id))
+    return os.path.join(config.CACHE_PATH,  name,
+                        'level%d' % level, md5(structure), 'samples-%d-%d.pk' % (split_id, sample_id))
 
 def scores_file(name, level, structure, split_id, sample_id):
     """The predictive log-likelihood scores on held-out data for a given CV split."""
-    return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                        'scores-%d-%d.pk' % (split_id, sample_id))
+    return os.path.join(level_dir(name, level), md5(structure), 'scores-%d-%d.pk' % (split_id, sample_id))
 
 def collected_scores_file(name, level, structure):
     """The predictive log-likelihood scores for a given structure, collected over all CV
     splits and ordered by the indices in the original data matrix."""
-    return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
-                        'collected-scores.pk')
+    return os.path.join(level_dir(name, level), md5(structure), 'collected-scores.pk')
 
 def winning_structure_file(name, level):
     """The highest performing structure at a given level of the search."""
@@ -142,7 +139,7 @@ def winning_structure_file(name, level):
 
 def running_time_file(name, level, structure, split_id, sample_id):
     """The running time for sampling from the posterior and computing predictive likelihood."""
-    return os.path.join(level_dir(name, level), grammar.pretty_print(structure, False, False),
+    return os.path.join(level_dir(name, level), md5(structure),
                         'time-%d-%d.pk' % (split_id, sample_id))
 
 def winning_samples_file(name, sample_id):
@@ -557,7 +554,7 @@ def run_everything(name, num_levels, args):
         run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
         run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
         collect_scores_for_level(name, level)
-    run_jobs(final_model_jobs(name, level), args, final_model_key(name, level))
+    run_jobs(final_model_jobs(name), args, final_model_key(name))
 
 
 ###################### summarizing the results #################################
@@ -739,7 +736,7 @@ if __name__ == '__main__':
         parser.add_argument('level', type=int)
         add_scheduler_args(parser)
         args = parser.parse_args()
-        run_jobs(final_model_jobs(args.name, args.level), args, final_model_key(args.name, args.level))
+        run_jobs(final_model_jobs(args.name), args, final_model_key(args.name))
 
     elif command == 'final_job':
         parser.add_argument('name', type=str)

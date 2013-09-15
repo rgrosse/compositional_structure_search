@@ -187,7 +187,7 @@ def run_everything(name, num_levels, args):
         experiments.run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
         experiments.run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
         collect_scores_for_level(name, level)
-    experiments.run_jobs(final_model_jobs(name, level), args, final_model_key(name, level))
+    experiments.run_jobs(final_model_jobs(name, level), args, final_model_key(name))
 
 
 
@@ -227,7 +227,7 @@ if __name__ == '__main__':
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
         experiments.run_jobs(final_model_jobs(args.name, args.level), args,
-                             final_model_key(args.name, args.level))
+                             final_model_key(args.name))
 
     elif command == 'everything':
         parser.add_argument('name', type=str)
