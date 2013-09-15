@@ -14,6 +14,7 @@ import time
 import config
 import grammar
 import observations
+import presentation
 import recursive
 import scoring
 from utils import storage
@@ -559,19 +560,7 @@ def run_everything(name, num_levels, args):
 
 ###################### summarizing the results #################################
 
-def format_table(table, sep='  '):
-    num_cols = len(table[0])
-    if any([len(row) != num_cols for row in table]):
-        raise RuntimeError('Number of columns must match.')
 
-    widths = [max([len(row[i]) for row in table])
-              for i in range(num_cols)]
-    format_string = sep.join(['%' + str(w) + 's' for w in widths])
-    return [format_string % tuple(row) for row in table]
-
-def format_table_latex(table):
-    return [l + ' \\\\' for l in format_table(table, ' & ')]
-    
 
 
 def format_structure(structure, latex=False):
@@ -580,101 +569,80 @@ def format_structure(structure, latex=False):
     else:
         return grammar.pretty_print(structure)
 
-def list_winning_models(name, num_levels, latex=False):
-    entries = []
-    done = False
-    for level in range(1, num_levels+1):
-        if done:
-            entries.append('---')
-            continue
-        
-        #try:
-        if True:
-            if compute_improvement(name, level) > 1.:
-                #curr_structure = winning_structure(name, level)
-                curr_structure = storage.load(winning_structure_file(name, level))
-                if type(curr_structure) == list:
-                    curr_structure = curr_structure[0]
-                entries.append(format_structure(curr_structure, latex))
-            else:
-                entries.append('---')
-                done = True
-        #except:
-        else:
-            entries.append('ERROR')
-            
-    return entries
 
-def print_scores(name, level):
-    #structures = cPickle.load(open(structures_file(name, level)))
+
+
+def compute_z_score(loglik, prev_loglik):
+    diff = loglik - prev_loglik
+    mean = diff.mean()
+    std = diff.std() / np.sqrt(loglik.size)
+    return mean / std
+
+def get_model_score(structure, result, prev_result):
+    row_impvt = result.row_avg() - prev_result.row_avg()
+    col_impvt = result.col_avg() - prev_result.col_avg()
+    z_row = compute_z_score(result.row_loglik, prev_result.row_loglik)
+    z_col = compute_z_score(result.col_loglik, prev_result.col_loglik)
+    return presentation.ModelScore(structure, result.row_avg(), result.col_avg(), result.total(),
+                                   row_impvt, col_impvt, z_row, z_col)
+
+def print_scores(name, level, outfile=sys.stdout):
     structures = storage.load(structures_file(name, level))
     structures = [s for _, s in structures]
-    scores = {}
+    model_scores = []
     for s in structures:
         result = compute_scores(name, level, s)
-        if result is None:
-            scores[s] = 'FAIL'
-        else:
-            scores[s] = (result.row_avg(), result.col_avg(), result.total())
-    def temp_key(s):
-        if scores[s] == 'FAIL':
-            return -np.infty
-        else:
-            return scores[s][2]
-    structures = sorted(structures, key=temp_key, reverse=True)
-    print '%30s%10s%10s%10s' % ('structure', 'row', 'col', 'total')
-    for s in structures:
-        if scores[s] == 'FAIL':
-            print '%30s%10s' % (grammar.pretty_print(s), 'FAIL')
-        else:
-            print '%30s%10.2f%10.2f%10.2f' % (grammar.pretty_print(s), scores[s][0], scores[s][1], scores[s][2])
-            
-        
-            
-
-## def print_clusters(name):
-##     sample_id = pick_winning_sample(name)
-##     #decomps = cPickle.load(open(winning_samples_file(name, sample_id)))
-##     #orig_data = cPickle.load(open(data_file(name)))
-##     decomps = storage.load(winning_samples_file(name, sample_id))
-##     orig_data = storage.load(data_file(name))
-##     recursive.print_clusters(orig_data, decomps[-1])
-
-def print_clusters(name, level, init_structure, structure, split_id, sample_id):
-    data_matrix = storage.load(data_file(name))
-    splits = storage.load(splits_file(name))
-    train_rows, train_cols, test_rows, test_cols = splits[split_id]
+        if result is not None:
+            prev_structure = init_structure_for(name, level, s)
+            prev_result = compute_scores(name, level-1, prev_structure)
+            model_scores.append(get_model_score(s, result, prev_result))
+    model_scores.sort(key=lambda ms: ms.total, reverse=True)
+    presentation.print_scores(level, model_scores, outfile)
     
-    X_train = data_matrix[train_rows[:, nax], train_cols[nax, :]]
+def print_model_sequence(name, num_levels, outfile=sys.stdout):
+    prev_structure = 'g'
+    model_scores = []
+    for level in range(1, num_levels + 1):
+        curr_structure = storage.load(winning_structure_file(name, level))[0]
+        result = compute_scores(name, level, curr_structure)
+        prev_result = compute_scores(name, level-1, prev_structure)
+        model_scores.append(get_model_score(curr_structure, result, prev_result))
+        prev_structure = curr_structure
+    presentation.print_model_sequence(model_scores, outfile)
 
-    sample = storage.load(samples_file(name, level, structure, split_id, sample_id))
-
-    recursive.print_clusters(X_train, sample)
-
-def print_clusters2(name, sequence):
-    sequence = map(grammar.parse, sequence)
-    data_matrix = storage.load(data_file(name))
-    temp = recursive.fit_sequence(sequence, data_matrix)
-    root = temp[-1]
-    recursive.print_clusters(data_matrix, root)
-    return root
-
-def fit_sequence(name, sequence):
-    sequence = map(grammar.parse, sequence)
-    data_matrix = storage.load(data_file(name))
-    return recursive.fit_sequence(sequence, data_matrix)
-
-
-
-def average_running_time(name, level, structure):
+def print_running_times(name, num_levels, outfile=sys.stdout):
     params = storage.load(params_file(name))
-    total = 0.
-    for i in range(params.num_splits):
-        for j in range(params.num_samples):
-            rtf = running_time_file(name, level, structure, i, j)
-            total += float(storage.load(rtf))
-    return total / float(params.num_samples * params.num_splits)
+    running_times = []
+    for level in range(1, num_levels+1):
+        structures = storage.load(structures_file(name, level))
+        structures = [s[1] for s in structures]
+        for structure in structures:
+            total = 0.
+            num_samples = 0
+            for split in range(params.num_splits):
+                for sample_id in range(params.num_samples):
+                    rtf = running_time_file(name, level, structure, split, sample_id)
+                    try:
+                        total += float(storage.load(rtf))
+                        num_samples += 1
+                    except IOError:
+                        pass
+            if num_samples > 0:
+                running_times.append(presentation.RunningTime(level, structure, num_samples, total))
 
+    presentation.print_running_times(running_times, outfile)
+                
+        
+def summarize_results(name, num_levels, outfile=sys.stdout):
+    print_model_sequence(name, num_levels, outfile)
+    print_running_times(name, num_levels, outfile)
+    for level in range(1, num_levels+1):
+        print_scores(name, level, outfile)
+
+
+
+        
+############################# command line #####################################
 
 
 def add_scheduler_args(parser):
