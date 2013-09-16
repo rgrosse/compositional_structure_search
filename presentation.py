@@ -19,8 +19,9 @@ def format_table_latex(table):
     return [l + ' \\\\' for l in format_table(table, ' & ')]
 
 class Failure:
-    def __init__(self, structure, all_failed, name=None):
+    def __init__(self, structure, level, all_failed, name=None):
         self.structure = structure
+        self.level = level
         self.all_failed = all_failed
         self.name = name
 
@@ -28,15 +29,17 @@ def print_failed_structures(failures, outfile=sys.stdout):
     if failures:
         print >> outfile, 'The inference algorithms failed for the following structures:'
         print >> outfile
+        print >> outfile, '%30s%8s        %s' % \
+              ('structure', 'level', 'notes')
         for f in failures:
-            line = '    %30s' % grammar.pretty_print(f.structure)
+            line = '%30s%8d        ' % (grammar.pretty_print(f.structure), f.level)
             if f.name:
-                line += '  (for %s)' % f.name
+                line += '(for %s)  ' % f.name
             if not f.all_failed:
-                line += '  (only some jobs failed)'
+                line += '(only some jobs failed)  '
             print >> outfile, line
-    print >> outfile
-    print >> outfile
+        print >> outfile
+        print >> outfile
 
 
 class ModelScore:

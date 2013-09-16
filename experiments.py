@@ -573,7 +573,28 @@ def format_structure(structure, latex=False):
         return grammar.pretty_print(structure)
 
 
+def print_failures(name, outfile=sys.stdout):
+    params = storage.load(params_file(name))
+    failures = []
+    for level in range(1, params.search_depth + 1):
+        for _, structure in storage.load(structures_file(name, level)):
+            total_ok = 0
+            
+            for split_id in range(params.num_splits):
+                for sample_id in range(params.num_samples):
+                    fname = scores_file(name, level, structure, split_id, sample_id)
+                    if os.path.exists(fname):
+                        row_loglik, col_loglik = storage.load(fname)
+                        if np.all(np.isfinite(row_loglik)) and np.all(np.isfinite(col_loglik)):
+                            total_ok += 1
 
+            if total_ok == 0:
+                failures.append(presentation.Failure(structure, level, True))
+            elif total_ok < params.num_splits * params.num_samples:
+                failures.append(presentation.Failure(structure, level, False))
+
+    presentation.print_failed_structures(failures, outfile)
+                
 
 def compute_z_score(loglik, prev_loglik):
     diff = loglik - prev_loglik
