@@ -36,6 +36,7 @@ class DefaultParams:
     num_steps_ais = 2000           # Number of AIS steps for GSM models
     save_samples = False           # Whether to save the posterior samples (can take up lots of disk space)
     gibbs_steps = 200              # Number of Gibbs steps for sampling from the posterior
+    search_depth = 3               # Number of steps in the search
 
     def __setattr__(self, k, v):
         """Make sure the field already exists, to catch typos."""
@@ -305,11 +306,11 @@ def compute_init_samples(name, level, structure, split_id, sample_id):
     row_loglik, col_loglik = evaluate_decomp(name, level-1, init_structure, split_id, sample_id, root)
     storage.dump((row_loglik, col_loglik), init_scores_file(name, level, structure, split_id, sample_id))
 
-def fit_winning_sequence(name, num_levels, sample_id):
+def fit_winning_sequence(name, sample_id):
     """After the sequence of models is identified, sample factorizations from each of the models on the full
     data matrix."""
     data_matrix = storage.load(data_file(name))
-    sequence = sequence_of_structures(name, num_levels)
+    sequence = sequence_of_structures(name)
     params = storage.load(params_file(name))
     decomps = recursive.fit_sequence(sequence, data_matrix, gibbs_steps=params.gibbs_steps)
     storage.dump(decomps, winning_samples_file(name, sample_id))
@@ -341,6 +342,8 @@ class PredictiveLikelihoodScores:
         return np.sum(self.col_loglik)
     def col_avg(self):
         return np.mean(self.col_loglik)
+    def all_finite(self):
+        return np.all(np.isfinite(self.row_loglik)) and np.all(np.isfinite(self.col_loglik))
 
 
 
@@ -479,11 +482,12 @@ def compute_improvement(name, level, structure=None):
     prev_scores = compute_scores(name, level-1, prev_structure)
     return (curr_scores.row_avg() - prev_scores.row_avg() + curr_scores.col_avg() - prev_scores.col_avg()) / 2.
 
-def sequence_of_structures(name, num_levels):
+def sequence_of_structures(name):
     """Get the sequence of structures corresponding to the final model chosen, i.e. a list
     of structures where each one was used to initialize the next one."""
     sequence = []
-    for level in range(1, num_levels+1):
+    params = storage.load(params_file(name))
+    for level in range(1, params.search_depth+1):
         if compute_improvement(name, level) < 1.:
             break
         sequence.append(storage.load(winning_structure_file(name, level))[0])
@@ -510,8 +514,6 @@ def initial_samples_jobs(name, level):
         raise RuntimeError('No need for initialization in level 1.')
 
     winning_structures = storage.load(winning_structure_file(name, level-1))
-    winning_structures = filter(lambda s: compute_improvement(name, level-1, s) > 1.,
-                                winning_structures)
 
     params = storage.load(params_file(name))
 
@@ -538,24 +540,25 @@ def evaluation_jobs(name, level):
 def evaluation_key(name, level):
     return '%s_eval_%d' % (name, level)
 
-def final_model_jobs(name, num_levels):
+def final_model_jobs(name):
     params = storage.load(params_file(name))
     
-    return ["final_job %s %d %d" % (name, num_levels, i) for i in range(params.num_samples)]
+    return ["final_job %s %d" % (name, i) for i in range(params.num_samples)]
 
 def final_model_key(name):
     return '%s_final' % name
 
-def run_everything(name, num_levels, args):
+def run_everything(name, args):
+    params = storage.load(params_file(name))
     init_level(name, 1)
     run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
     collect_scores_for_level(name, 1)
-    for level in range(2, num_levels + 1):
+    for level in range(2, params.search_depth + 1):
         init_level(name, level)
         run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
         run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
         collect_scores_for_level(name, level)
-    run_jobs(final_model_jobs(name, num_levels), args, final_model_key(name))
+    run_jobs(final_model_jobs(name), args, final_model_key(name))
 
 
 ###################### summarizing the results #################################
@@ -592,6 +595,8 @@ def print_scores(name, level, outfile=sys.stdout):
     model_scores = []
     for s in structures:
         result = compute_scores(name, level, s)
+        if not result.all_finite():
+            continue
         if result is not None:
             prev_structure = init_structure_for(name, level, s)
             prev_result = compute_scores(name, level-1, prev_structure)
@@ -599,10 +604,11 @@ def print_scores(name, level, outfile=sys.stdout):
     model_scores.sort(key=lambda ms: ms.total, reverse=True)
     presentation.print_scores(level, model_scores, outfile)
     
-def print_model_sequence(name, num_levels, outfile=sys.stdout):
+def print_model_sequence(name, outfile=sys.stdout):
+    params = storage.load(params_file(name))
     prev_structure = 'g'
     model_scores = []
-    for level in range(1, num_levels + 1):
+    for level in range(1, params.search_depth + 1):
         curr_structure = storage.load(winning_structure_file(name, level))[0]
         result = compute_scores(name, level, curr_structure)
         prev_result = compute_scores(name, level-1, prev_structure)
@@ -610,10 +616,10 @@ def print_model_sequence(name, num_levels, outfile=sys.stdout):
         prev_structure = curr_structure
     presentation.print_model_sequence(model_scores, outfile)
 
-def print_running_times(name, num_levels, outfile=sys.stdout):
+def print_running_times(name, outfile=sys.stdout):
     params = storage.load(params_file(name))
     running_times = []
-    for level in range(1, num_levels+1):
+    for level in range(1, params.search_depth+1):
         structures = storage.load(structures_file(name, level))
         structures = [s[1] for s in structures]
         for structure in structures:
@@ -633,10 +639,11 @@ def print_running_times(name, num_levels, outfile=sys.stdout):
     presentation.print_running_times(running_times, outfile)
                 
         
-def summarize_results(name, num_levels, outfile=sys.stdout):
-    print_model_sequence(name, num_levels, outfile)
-    print_running_times(name, num_levels, outfile)
-    for level in range(1, num_levels+1):
+def summarize_results(name, outfile=sys.stdout):
+    params = storage.load(params_file(name))
+    print_model_sequence(name, outfile)
+    print_running_times(name, outfile)
+    for level in range(1, params.search_depth+1):
         print_scores(name, level, outfile)
 
 
@@ -701,24 +708,21 @@ if __name__ == '__main__':
 
     elif command == 'final':
         parser.add_argument('name', type=str)
-        parser.add_argument('num_levels', type=int)
         add_scheduler_args(parser)
         args = parser.parse_args()
-        run_jobs(final_model_jobs(args.name, args.num_levels), args, final_model_key(args.name))
+        run_jobs(final_model_jobs(args.name), args, final_model_key(args.name))
 
     elif command == 'final_job':
         parser.add_argument('name', type=str)
-        parser.add_argument('num_levels', type=int)
         parser.add_argument('sample_id', type=int)
         args = parser.parse_args()
-        fit_winning_sequence(args.name, args.num_levels, args.sample_id)
+        fit_winning_sequence(args.name, args.sample_id)
 
     elif command == 'everything':
         parser.add_argument('name', type=str)
-        parser.add_argument('num_levels', type=int)
         add_scheduler_args(parser)
         args = parser.parse_args()
-        run_everything(args.name, args.num_levels, args)
+        run_everything(args.name, args)
 
     else:
         raise RuntimeError('Unknown command: %s' % command)

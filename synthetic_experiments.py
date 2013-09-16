@@ -13,6 +13,8 @@ NUM_ROWS = 200
 NUM_COLS = 200
 NUM_COMPONENTS = 10
 
+DEFAULT_SEARCH_DEPTH = 3
+
 def generate_ar(nrows, ncols, a):
     X = np.zeros((nrows, ncols))
     X[0,:] = np.random.normal(size=ncols)
@@ -155,14 +157,14 @@ def final_model_key():
     return 'synthetic_final'
 
 
-def init_experiment(debug):
+def init_experiment(debug, search_depth=3):
     for noise_str in NOISE_STR_VALUES:
         for model in ALL_MODELS:
             name = experiment_name(noise_str, model)
             if debug:
-                params = experiments.DebugParams()
+                params = experiments.DebugParams(search_depth=search_depth)
             else:
-                params = experiments.SmallParams()
+                params = experiments.SmallParams(search_depth=search_depth)
             data, components = generate_data(model, NUM_ROWS, NUM_COLS, NUM_COMPONENTS, True)
             clean_data_matrix = observations.DataMatrix.from_real_values(data)
             noise_var = float(noise_str)
@@ -179,10 +181,10 @@ def collect_scores_for_level(level):
     for name in all_experiment_names():
         experiments.collect_scores_for_level(name, level)
 
-def run_everything(name, num_levels, args):
+def run_everything(name, search_depth, args):
     init_level(name, 1)
     experiments.run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
-    for level in range(2, num_levels + 1):
+    for level in range(2, search_depth + 1):
         init_level(name, level)
         experiments.run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
         experiments.run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
@@ -199,8 +201,9 @@ if __name__ == '__main__':
 
     if command == 'generate':
         parser.add_argument('--debug', action='store_true', default=False)
+        parser.add_argument('--search_depth', type=int, default=DEFAULT_SEARCH_DEPTH)
         args = parser.parse_args()
-        init_experiment(args.debug)
+        init_experiment(args.debug, args.search_depth)
 
     elif command == 'init':
         parser.add_argument('name', type=str)
@@ -231,10 +234,10 @@ if __name__ == '__main__':
 
     elif command == 'everything':
         parser.add_argument('name', type=str)
-        parser.add_argument('num_levels', type=int)
+        parser.add_argument('--search_depth', type=int, default=DEFAULT_SEARCH_DEPTH)
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
-        run_everything(args.name, args.num_levels, args)
+        run_everything(args.name, args.search_depth, args)
 
     else:
         raise RuntimeError('Unknown command: %s' % command)
