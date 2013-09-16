@@ -7,6 +7,7 @@ import hashlib
 import numpy as np
 nax = np.newaxis
 import os
+import StringIO
 import sys
 import termcolor
 import time
@@ -17,7 +18,7 @@ import observations
 import presentation
 import recursive
 import scoring
-from utils import storage
+from utils import misc, storage
 
 import single_process
 import parallel
@@ -148,6 +149,11 @@ def winning_samples_file(name, sample_id):
     """Posterior samples from each model in the sequence chosen by the structure search."""
     return os.path.join(experiment_dir(name), 'winning-samples-%d.pk' % sample_id)
 
+def report_dir(name):
+    return os.path.join(config.REPORT_PATH, name)
+
+def report_file(name):
+    return os.path.join(report_dir(name), 'results.txt')
 
 
 
@@ -174,6 +180,9 @@ def init_experiment(name, data_matrix, params, components=None, clean_data_matri
     information, to files, and generating cross-validation splits."""
     if not os.path.exists(experiment_dir(name)):
         os.mkdir(experiment_dir(name))
+
+    if not os.path.exists(report_dir(name)):
+        os.mkdir(report_dir(name))
 
     storage.dump(params, params_file(name))
     splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
@@ -552,7 +561,7 @@ def final_model_jobs(name):
 def final_model_key(name):
     return '%s_final' % name
 
-def run_everything(name, args):
+def run_everything(name, args, email=None):
     params = storage.load(params_file(name))
     init_level(name, 1)
     run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
@@ -563,6 +572,7 @@ def run_everything(name, args):
         run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
         collect_scores_for_level(name, level)
     run_jobs(final_model_jobs(name), args, final_model_key(name))
+    save_report(name, email)
 
 
 ###################### summarizing the results #################################
@@ -667,10 +677,28 @@ def print_running_times(name, outfile=sys.stdout):
 def summarize_results(name, outfile=sys.stdout):
     params = storage.load(params_file(name))
     print_model_sequence(name, outfile)
+    print_failures(name, outfile)
     print_running_times(name, outfile)
     for level in range(1, params.search_depth+1):
         print_scores(name, level, outfile)
 
+def save_report(name, email=None):
+    # write to stdout
+    summarize_results(name)
+
+    # write to report file
+    summarize_results(name, open(report_file(name), 'w'))
+
+    if email is not None and email.find('@') != -1:
+        header = 'experiment %s finished' % name
+        buff = StringIO.StringIO()
+        print >> buff, 'These results are best viewed in a monospace font.'
+        print >> buff
+        summarize_results(name, buff)
+        body = buff.getvalue()
+        buff.close()
+        misc.send_email(header, body, email)
+        
 
 
         
@@ -745,9 +773,10 @@ if __name__ == '__main__':
 
     elif command == 'everything':
         parser.add_argument('name', type=str)
+        parser.add_argument('--email', type=str, default=None)
         add_scheduler_args(parser)
         args = parser.parse_args()
-        run_everything(args.name, args)
+        run_everything(args.name, args, email=args.email)
 
     else:
         raise RuntimeError('Unknown command: %s' % command)

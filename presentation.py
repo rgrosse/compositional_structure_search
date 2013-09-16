@@ -99,7 +99,7 @@ def format_time(t):
 
 def print_running_times(running_times, outfile=sys.stdout):
     total = sum([rt.total_time for rt in running_times])
-    print 'Total CPU time was %s. Here is the breakdown:' % format_time(total)
+    print >> outfile, 'Total CPU time was %s. Here is the breakdown:' % format_time(total)
     print >> outfile
     print >> outfile, '%30s%8s        %s' % \
           ('structure', 'level', 'time')
@@ -107,7 +107,7 @@ def print_running_times(running_times, outfile=sys.stdout):
     running_times = sorted(running_times, key=lambda rt: rt.total_time, reverse=True)
     for rt in running_times:
         time_str = '%d  x  %s' % (rt.num_samples, format_time(rt.total_time / rt.num_samples))
-        print '%30s%8d        %s' % (grammar.pretty_print(rt.structure), rt.level, time_str)
+        print >> outfile, '%30s%8d        %s' % (grammar.pretty_print(rt.structure), rt.level, time_str)
     print >> outfile
     print >> outfile
 

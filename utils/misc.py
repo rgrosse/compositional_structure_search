@@ -5,6 +5,7 @@ import numpy as np
 nax = np.newaxis
 import progressbar
 import scipy.linalg, scipy.integrate
+import smtplib
 import sys
 import termcolor
 
@@ -547,3 +548,17 @@ def print_integers_colored(a):
 def pbar(maxval):
     widgets = [progressbar.Percentage(), ' ', progressbar.Bar(), progressbar.ETA()]
     return progressbar.ProgressBar(widgets=widgets, maxval=maxval).start()
+
+
+def send_email(header, body, address):
+    msg = '\r\n'.join(['From: %s' % address,
+                       'To: %s' % address,
+                       'Subject: %s' % header,
+                       '',
+                       body])
+
+    s = smtplib.SMTP('localhost')
+    s.sendmail(address, [address], msg)
+    s.quit()
+
+    
