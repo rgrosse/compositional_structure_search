@@ -487,10 +487,14 @@ def sequence_of_structures(name):
     of structures where each one was used to initialize the next one."""
     sequence = []
     params = storage.load(params_file(name))
-    for level in range(1, params.search_depth+1):
-        if compute_improvement(name, level) < 1.:
-            break
-        sequence.append(storage.load(winning_structure_file(name, level))[0])
+
+    structure = storage.load(winning_structure_file(name, params.search_depth))[0]
+    sequence = [structure]
+
+    for level in range(1, params.search_depth)[::-1]:
+        structure = init_structure_for(name, level + 1, structure)
+        sequence = [structure] + sequence
+    
     return sequence
 
 
