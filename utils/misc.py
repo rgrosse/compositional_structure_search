@@ -1,5 +1,4 @@
 import collections
-from PIL import Image
 import itertools
 import numpy as np
 nax = np.newaxis
@@ -8,14 +7,6 @@ import scipy.linalg, scipy.integrate
 import smtplib
 import sys
 import termcolor
-
-
-def arr2img(arr, rescale=True):
-    if rescale:
-        assert np.all(0. <= arr) and np.all(arr <= 1.)
-        return Image.fromarray((arr*255).astype('uint8'))
-    else:
-        return Image.fromarray(arr.astype('uint8'))
 
 
 def is_diag(A):
