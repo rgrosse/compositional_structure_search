@@ -179,7 +179,7 @@ def init_experiment(prefix, debug, search_depth=3):
         for model in ALL_MODELS:
             name = experiment_name(prefix, noise_str, model)
             if debug:
-                params = experiments.DebugParams(search_depth=search_depth)
+                params = experiments.QuickParams(search_depth=search_depth)
             else:
                 params = experiments.SmallParams(search_depth=search_depth)
             data, components = generate_data(model, NUM_ROWS, NUM_COLS, NUM_COMPONENTS, True)

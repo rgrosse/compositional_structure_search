@@ -62,7 +62,7 @@ class LargeParams(DefaultParams):
     num_splits = 2
     num_samples = 3
 
-class DebugParams(DefaultParams):
+class QuickParams(DefaultParams):
     """Parameter settings for debugging, so you can quickly run jobs and make sure they don't crash"""
     num_splits = 2
     num_samples = 2

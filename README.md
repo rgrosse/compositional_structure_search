@@ -4,7 +4,7 @@ This software package implements the algorithms described in the paper
 > "Exploiting compositionality to explore a large space of model structures," UAI 2012.
 
 
-### Requirements
+## Requirements
 
 This code base depends on a number of Python packages, most of which are pretty standard.
 Most of the packages are available through [Enthought Canopy](https://www.enthought.com/products/canopy/),
@@ -26,7 +26,7 @@ More recent versions than the ones listed above should work fine, though unfortu
 the interfaces to some SciPy routines have a tendency to change without warning...
 
 
-### Configuration
+## Configuration
 
 In order to run the structure search, you need to specify some local configuration parameters
 in `config.py`. First, in the main project directory, copy the template:
@@ -56,8 +56,38 @@ entering a password. We realize this might not correspond to your situation, so 
 how you can write your own job scheduler module geared towards the clusters at your own institution.
 
 
+## Running the example
 
-### Running the structure search
+We provide an example of how to run the structure search in `example.py`. This runs the
+structure search on the mammals dataset of Kemp et al. (2006), "Learning systems of concepts
+with an infinite relational model." This is a 50 x 85 matrix where the rows represent
+different species of mammal, the columns represent attributes, and each entry is a binary
+value representing subjects' judgments of whether the animal has that attribute. Our structure
+search did not result in a clear structure for this dataset, but it serves as an example which
+can be run quickly (3.2 CPU minutes for me). 
+
+After following the configuration directions above, run the following from the command line:
+
+    python example.py
+    python experiments.py everything example
+
+This will run the structure search, and then output the results to the shell (and also save
+them to the `example` subdirectory of `config.REPORT_PATH`). The results include the following:
+
+- the best-performing structure at each level of the search, with their improvement in
+  predictive log-likelihood for rows and columns, as well as z-scores for the improvement
+  (see TODO)
+- the total CPU time, also broken down by model
+- the predictive log-liklihood scores for all structures at all levels of the search, sorted 
+  from best to worst
+
+Note that the search parameters used in this example are probably
+insufficient for inference; if you are interested in accurate results for this dataset,
+change `QuickParams` to `SmallParams` in `example.py`.
+
+
+
+## Running the structure search
 
 Suppose you have a real-valued matrix `X` you're interested in learning the structure of,
 in the form of a NumPy array. The first step is to create a `DataMatrix` instance:
