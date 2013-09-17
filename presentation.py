@@ -1,3 +1,5 @@
+import collections
+import numpy as np
 import sys
 
 import grammar
@@ -133,4 +135,42 @@ def print_learned_structures(results, outfile=sys.stdout):
     print >> outfile
 
 
+
+class LatentVariables:
+    def __init__(self, label, z):
+        self.label = label
+        self.z = z
+
+def print_components(model, structure, row_or_col, items, outfile=sys.stdout):
+    cluster_members = collections.defaultdict(list)
+    if model == 'clustering':
+        for item in items:
+            z = item.z if np.isscalar(item.z) else item.z.argmax()
+            cluster_members[z].append(item.label)
+
+        component_type, component_type_pl = 'Cluster', 'clusters'
+    elif model == 'binary':
+        for item in items:
+            for i, zi in enumerate(item.z):
+                if zi:
+                    cluster_members[i].append(item.label)
+        component_type, component_type_pl = 'Component', 'components'
+            
+    cluster_ids = sorted(cluster_members.keys(), key=lambda k: len(cluster_members[k]), reverse=True)
+
+    row_col_str = {'row': 'row', 'col': 'column'}[row_or_col]
+    print >> outfile, 'For structure %s, the following %s %s were found:' % \
+          (grammar.pretty_print(structure), row_col_str, component_type_pl)
+    print >> outfile
+
+    for i, cid in enumerate(cluster_ids):
+        print >> outfile, '    %s %d:' % (component_type, i+1)
+        print >> outfile
+        for label in cluster_members[cid]:
+            print >> outfile, '        %s' % label
+        print >> outfile
+    print >> outfile
+
+
+    
 

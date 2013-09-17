@@ -609,9 +609,9 @@ def final_structure(name):
             break
 
     if stop_at == 0:
-        return 'g'
+        return 'g', 0
     else:
-        return storage.load(winning_structure_file(name, stop_at))[0]
+        return storage.load(winning_structure_file(name, stop_at))[0], stop_at
 
 
 def print_failures(name, outfile=sys.stdout):
@@ -699,6 +699,43 @@ def print_running_times(name, outfile=sys.stdout):
                 running_times.append(presentation.RunningTime(level, structure, num_samples, total))
 
     presentation.print_running_times(running_times, outfile)
+
+def print_components_for_decomp(name, structure, decomp, outfile=sys.stdout):
+    data_matrix = storage.load(data_file(name))
+
+    for model in ['clustering', 'binary']:
+        if model == 'clustering':
+            left_dist, right_dist = 'm', 'M'
+        else:
+            left_dist, right_dist = 'b', 'B'
+
+        if data_matrix.row_labels is not None:
+            nodes = recursive.find_nodes(decomp, lambda node: isinstance(node, recursive.LeafNode)
+                                         and node.distribution() == left_dist and node.m == data_matrix.m)
+            for node in nodes:
+                items = [presentation.LatentVariables(row_label, node.value()[i, :])
+                         for i, row_label in enumerate(data_matrix.row_labels)]
+                presentation.print_components(model, structure, 'row', items, outfile)
+
+        if data_matrix.col_labels is not None:
+            nodes = recursive.find_nodes(decomp, lambda  node: isinstance(node, recursive.LeafNode)
+                                         and node.distribution() == right_dist and node.n == data_matrix.n)
+            for node in nodes:
+                items = [presentation.LatentVariables(col_label, node.value()[:, i])
+                         for i, col_label in enumerate(data_matrix.col_labels)]
+                presentation.print_components(model, structure, 'col', items, outfile)
+            
+    
+def print_components(name, outfile=sys.stdout):
+    structure, level = final_structure(name)
+    if level == 0:
+        return
+    seq = storage.load(winning_samples_file(name, 0))
+    decomp = seq[level]
+    print_components_for_decomp(name, structure, decomp, outfile)
+    
+
+    
                 
         
 def summarize_results(name, outfile=sys.stdout):
@@ -708,6 +745,7 @@ def summarize_results(name, outfile=sys.stdout):
     print_running_times(name, outfile)
     for level in range(1, params.search_depth+1):
         print_scores(name, level, outfile)
+    print_components(name, outfile)
 
 def save_report(name, email=None):
     # write to stdout

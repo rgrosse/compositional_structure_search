@@ -245,7 +245,7 @@ def print_failures(prefix, outfile=sys.stdout):
 def print_learned_structures(prefix, outfile=sys.stdout):
     results = []
     for expt_name in all_experiment_names(prefix):
-        structure = experiments.final_structure(expt_name)
+        structure, _ = experiments.final_structure(expt_name)
         results.append(presentation.FinalResult(expt_name, structure))
     presentation.print_learned_structures(results, outfile)
 

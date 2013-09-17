@@ -566,7 +566,6 @@ def print_clusters_helper(U, names):
         print
 
 def find_nodes(node, property):
-    print node
     if property(node):
         found = [node]
     else:
