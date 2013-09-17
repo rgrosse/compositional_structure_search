@@ -60,6 +60,7 @@ class SmallParams(DefaultParams):
 class LargeParams(DefaultParams):
     """Reasonable parameter settings for larger matrices"""
     num_splits = 2
+    num_samples = 3
 
 class DebugParams(DefaultParams):
     """Parameter settings for debugging, so you can quickly run jobs and make sure they don't crash"""
@@ -174,15 +175,22 @@ def nfold_cv(nrows, ncols, nsplits):
         splits.append((train_rows, train_cols, test_rows, test_cols))
     return splits
 
+def check_required_directories():
+    config_vars = ['RESULTS_PATH', 'CODE_PATH', 'JOBS_PATH', 'REPORT_PATH']
+    for v in config_vars:
+        if not hasattr(config, v):
+            raise RuntimeError('Need to specify %s in config.py' % v)
+        if not os.path.exists(getattr(config, v)):
+            raise RuntimeError('Directory specified in config.%s does not exist: %s' %
+                               (v, getattr(config, v)))
 
 def init_experiment(name, data_matrix, params, components=None, clean_data_matrix=None):
     """Initialize the structure search by saving the matrix, and possibly auxiliary
     information, to files, and generating cross-validation splits."""
+    check_required_directories()
+    
     if not os.path.exists(experiment_dir(name)):
         os.mkdir(experiment_dir(name))
-
-    if not os.path.exists(report_dir(name)):
-        os.mkdir(report_dir(name))
 
     storage.dump(params, params_file(name))
     splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
@@ -586,6 +594,20 @@ def format_structure(structure, latex=False):
     else:
         return grammar.pretty_print(structure)
 
+def final_structure(name):
+    params = storage.load(params_file(name))
+    stop_at = 0
+    for level in range(1, params.search_depth + 1):
+        if compute_improvement(name, level) > 1.:
+            stop_at = level
+        else:
+            break
+
+    if stop_at == 0:
+        return 'g'
+    else:
+        return storage.load(winning_structure_file(name, stop_at))[0]
+
 
 def print_failures(name, outfile=sys.stdout):
     params = storage.load(params_file(name))
@@ -687,6 +709,8 @@ def save_report(name, email=None):
     summarize_results(name)
 
     # write to report file
+    if not os.path.exists(report_dir(name)):
+        os.mkdir(report_dir(name))
     summarize_results(name, open(report_file(name), 'w'))
 
     if email is not None and email.find('@') != -1:

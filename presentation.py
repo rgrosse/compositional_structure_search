@@ -31,6 +31,7 @@ def print_failed_structures(failures, outfile=sys.stdout):
         print >> outfile
         print >> outfile, '%30s%8s        %s' % \
               ('structure', 'level', 'notes')
+        print >> outfile
         for f in failures:
             line = '%30s%8d        ' % (grammar.pretty_print(f.structure), f.level)
             if f.name:
@@ -112,6 +113,24 @@ def print_running_times(running_times, outfile=sys.stdout):
     print >> outfile
 
 
+class FinalResult:
+    def __init__(self, expt_name, structure):
+        self.expt_name = expt_name
+        self.structure = structure
+
+def print_learned_structures(results, outfile=sys.stdout):
+    def sortkey(result):
+        return result.expt_name.split('_')[-1]
+    results = sorted(results, key=sortkey)
+
+    print >> outfile, 'The learned structures:'
+    print >> outfile
+    print >> outfile, '%25s%25s' % ('experiment', 'structure')
+    print >> outfile
+    for r in results:
+        print >> outfile, '%25s%25s' % (r.expt_name, grammar.pretty_print(r.structure))
+    print >> outfile
+    print >> outfile
 
 
 

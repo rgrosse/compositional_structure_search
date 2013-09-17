@@ -1,12 +1,16 @@
 import argparse
+import collections
 import numpy as np
 nax = np.newaxis
 import os
+import StringIO
 import sys
 
 import config
 import experiments
 import observations
+import presentation
+from utils import misc, storage
 
 
 NUM_ROWS = 200
@@ -14,6 +18,7 @@ NUM_COLS = 200
 NUM_COMPONENTS = 10
 
 DEFAULT_SEARCH_DEPTH = 3
+DEFAULT_PREFIX = 'synthetic'
 
 def generate_ar(nrows, ncols, a):
     X = np.zeros((nrows, ncols))
@@ -126,41 +131,53 @@ NOISE_STR_VALUES = ['0.1', '1.0', '3.0', '10.0']
 ALL_MODELS = ['pmf', 'mog', 'ibp', 'chain', 'irm', 'bmf', 'kf', 'bctf', 'sparse', 'gsm']
 
 
-def experiment_name(noise_str, model):
-    return 'synthetic_%s_%s' % (noise_str, model)
+def experiment_name(prefix, noise_str, model):
+    return '%s_%s_%s' % (prefix, noise_str, model)
 
-def all_experiment_names():
-    return [experiment_name(noise_str, model)
+def all_experiment_names(prefix):
+    return [experiment_name(prefix, noise_str, model)
             for noise_str in NOISE_STR_VALUES
             for model in ALL_MODELS
             ]
 
-def initial_samples_jobs(level):
+def load_params(prefix):
+    expt_name = all_experiment_names(prefix)[0]
+    return storage.load(experiments.params_file(expt_name))
+
+def initial_samples_jobs(prefix, level):
     return reduce(list.__add__, [experiments.initial_samples_jobs(name, level)
-                                 for name in all_experiment_names()])
+                                 for name in all_experiment_names(prefix)])
 
-def initial_samples_key(level):
-    return 'synthetic_init_%d' % level
+def initial_samples_key(prefix, level):
+    return '%s_init_%d' % (prefix, level)
 
-def evaluation_jobs(level):
+def evaluation_jobs(prefix, level):
     return reduce(list.__add__, [experiments.evaluation_jobs(name, level)
-                                 for name in all_experiment_names()])
+                                 for name in all_experiment_names(prefix)])
 
-def evaluation_key(level):
-    return 'synthetic_eval_%d' % level
+def evaluation_key(prefix, level):
+    return '%s_eval_%d' % (prefix, level)
 
-def final_model_jobs(level):
-    return reduce(list.__add__, [experiments.final_model_jobs(name, level)
-                                 for name in all_experiment_names()])
+def final_model_jobs(prefix):
+    return reduce(list.__add__, [experiments.final_model_jobs(name)
+                                 for name in all_experiment_names(prefix)])
 
-def final_model_key():
-    return 'synthetic_final'
+def final_model_key(prefix):
+    return '%s_final' % prefix
+
+def report_dir(prefix):
+    return os.path.join(config.REPORT_PATH, prefix)
+
+def report_file(prefix):
+    return os.path.join(report_dir(prefix), 'results.txt')
 
 
-def init_experiment(debug, search_depth=3):
+def init_experiment(prefix, debug, search_depth=3):
+    experiments.check_required_directories()
+        
     for noise_str in NOISE_STR_VALUES:
         for model in ALL_MODELS:
-            name = experiment_name(noise_str, model)
+            name = experiment_name(prefix, noise_str, model)
             if debug:
                 params = experiments.DebugParams(search_depth=search_depth)
             else:
@@ -172,25 +189,88 @@ def init_experiment(debug, search_depth=3):
             data_matrix = observations.DataMatrix.from_real_values(noisy_data)
             experiments.init_experiment(name, data_matrix, params, components,
                                         clean_data_matrix=clean_data_matrix)
+    
         
-def init_level(level):
-    for name in all_experiment_names():
+def init_level(prefix, level):
+    for name in all_experiment_names(prefix):
         experiments.init_level(name, level)
 
-def collect_scores_for_level(level):
-    for name in all_experiment_names():
+def collect_scores_for_level(prefix, level):
+    for name in all_experiment_names(prefix):
         experiments.collect_scores_for_level(name, level)
 
-def run_everything(name, search_depth, args):
-    init_level(name, 1)
-    experiments.run_jobs(evaluation_jobs(name, 1), args, evaluation_key(name, 1))
-    for level in range(2, search_depth + 1):
-        init_level(name, level)
-        experiments.run_jobs(initial_samples_jobs(name, level), args, initial_samples_key(name, level))
-        experiments.run_jobs(evaluation_jobs(name, level), args, evaluation_key(name, level))
-        collect_scores_for_level(name, level)
-    experiments.run_jobs(final_model_jobs(name, level), args, final_model_key(name))
+def run_everything(prefix, args):
+    params = load_params(prefix)
+    init_level(prefix, 1)
+    experiments.run_jobs(evaluation_jobs(prefix, 1), args, evaluation_key(prefix, 1))
+    collect_scores_for_level(prefix, 1)
+    for level in range(2, params.search_depth + 1):
+        init_level(prefix, level)
+        experiments.run_jobs(initial_samples_jobs(prefix, level), args, initial_samples_key(prefix, level))
+        experiments.run_jobs(evaluation_jobs(prefix, level), args, evaluation_key(prefix, level))
+        collect_scores_for_level(prefix, level)
+    experiments.run_jobs(final_model_jobs(prefix), args, final_model_key(prefix))
 
+
+def print_failures(prefix, outfile=sys.stdout):
+    params = load_params(prefix)
+    failures = []
+    for level in range(1, params.search_depth + 1):
+        ok_counts = collections.defaultdict(int)
+        fail_counts = collections.defaultdict(int)
+        for expt_name in all_experiment_names(prefix):
+            for _, structure in storage.load(experiments.structures_file(expt_name, level)):
+                for split_id in range(params.num_splits):
+                    for sample_id in range(params.num_samples):
+                        ok = False
+                        fname = experiments.scores_file(expt_name, level, structure, split_id, sample_id)
+                        if os.path.exists(fname):
+                            row_loglik, col_loglik = storage.load(fname)
+                            if np.all(np.isfinite(row_loglik)) and np.all(np.isfinite(col_loglik)):
+                                ok = True
+
+                        if ok:
+                            ok_counts[structure] += 1
+                        else:
+                            fail_counts[structure] += 1
+
+        for structure in fail_counts:
+            if ok_counts[structure] > 0:
+                failures.append(presentation.Failure(structure, level, False))
+            else:
+                failures.append(presentation.Failure(structure, level, True))
+
+    presentation.print_failed_structures(failures, outfile)
+
+def print_learned_structures(prefix, outfile=sys.stdout):
+    results = []
+    for expt_name in all_experiment_names(prefix):
+        structure = experiments.final_structure(expt_name)
+        results.append(presentation.FinalResult(expt_name, structure))
+    presentation.print_learned_structures(results, outfile)
+
+def summarize_results(prefix, outfile=sys.stdout):
+    print_learned_structures(prefix, outfile)
+    print_failures(prefix, outfile)
+
+def save_report(name, email=None):
+    # write to stdout
+    summarize_results(name)
+
+    # write to report file
+    if not os.path.exists(report_dir(name)):
+        os.mkdir(report_dir(name))
+    summarize_results(name, open(report_file(name), 'w'))
+
+    if email is not None and email.find('@') != -1:
+        header = 'experiment %s finished' % name
+        buff = StringIO.StringIO()
+        print >> buff, 'These results are best viewed in a monospace font.'
+        print >> buff
+        summarize_results(name, buff)
+        body = buff.getvalue()
+        buff.close()
+        misc.send_email(header, body, email)
 
 
 
@@ -202,42 +282,42 @@ if __name__ == '__main__':
     if command == 'generate':
         parser.add_argument('--debug', action='store_true', default=False)
         parser.add_argument('--search_depth', type=int, default=DEFAULT_SEARCH_DEPTH)
+        parser.add_argument('--prefix', type=str, default=DEFAULT_PREFIX)
         args = parser.parse_args()
-        init_experiment(args.debug, args.search_depth)
+        init_experiment(args.prefix, args.debug, args.search_depth)
 
     elif command == 'init':
-        parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
+        parser.add_argument('--prefix', type=str, default=DEFAULT_PREFIX)
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
-        init_level(args.name, args.level)
+        init_level(args.prefix, args.level)
         if args.level > 1:
-            experiments.run_jobs(initial_samples_jobs(args.name, args.level), args,
-                                 initial_samples_key(args.name, args.level))
+            experiments.run_jobs(initial_samples_jobs(args.prefix, args.level), args,
+                                 initial_samples_key(args.prefix, args.level))
 
     elif command == 'eval':
-        parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
+        parser.add_argument('--prefix', type=str, default=DEFAULT_PREFIX)
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
-        experiments.run_jobs(evaluation_jobs(args.name, args.level), args,
-                             evaluation_key(args.name, args.level))
-        collect_scores_for_level(args.name, args.level)
+        experiments.run_jobs(evaluation_jobs(args.prefix, args.level), args,
+                             evaluation_key(args.prefix, args.level))
+        collect_scores_for_level(args.prefix, args.level)
 
     elif command == 'final':
-        parser.add_argument('name', type=str)
         parser.add_argument('level', type=int)
+        parser.add_argument('--prefix', type=str, default=DEFAULT_PREFIX)
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
-        experiments.run_jobs(final_model_jobs(args.name, args.level), args,
-                             final_model_key(args.name))
+        experiments.run_jobs(final_model_jobs(args.prefix, args.level), args,
+                             final_model_key(args.prefix))
 
     elif command == 'everything':
-        parser.add_argument('name', type=str)
-        parser.add_argument('--search_depth', type=int, default=DEFAULT_SEARCH_DEPTH)
+        parser.add_argument('--prefix', type=str, default=DEFAULT_PREFIX)
         experiments.add_scheduler_args(parser)
         args = parser.parse_args()
-        run_everything(args.name, args.search_depth, args)
+        run_everything(args.prefix, args)
 
     else:
         raise RuntimeError('Unknown command: %s' % command)
