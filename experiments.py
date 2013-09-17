@@ -39,6 +39,10 @@ class DefaultParams:
     gibbs_steps = 200              # Number of Gibbs steps for sampling from the posterior
     search_depth = 3               # Number of steps in the search
 
+    # production rules (see grammar.py)
+    rules = ['low-rank', 'clustering', 'binary', 'chain', 'sparsity']
+    expand_noise = False           # whether to expand the final G
+
     def __setattr__(self, k, v):
         """Make sure the field already exists, to catch typos."""
         if not hasattr(DefaultParams, k):
@@ -205,14 +209,14 @@ def init_experiment(name, data_matrix, params, components=None, clean_data_matri
         storage.dump(components, components_file(name))
     
 
-def list_structure_pairs(init_structures):
+def list_structure_pairs(init_structures, rules, expand_noise):
     """Expand all of a set of structures. Returns a list of (init_structure, successor_structure) pairs.
     If a structure is a successor to multiple structures in the previous level, keep only the
     best-performing one."""
     pairs = []
     next_structures = set()
     for s in init_structures:
-        succ = grammar.list_collapsed_successors(s)
+        succ = grammar.list_collapsed_successors(s, rules, expand_noise)
         for s1 in succ:
             if s1 not in next_structures:
                 pairs.append((s, s1))
@@ -225,12 +229,13 @@ def init_level(name, level):
     to be evaluated."""
     if not os.path.exists(experiment_dir(name)):
         raise RuntimeError('Experiment %s not yet initialized.' % name)
-    
+
+    params = storage.load(params_file(name))
     if level == 1:
         init_structures = ['g']
     else:
         init_structures = storage.load(winning_structure_file(name, level - 1))
-    structure_pairs = list_structure_pairs(init_structures)
+    structure_pairs = list_structure_pairs(init_structures, params.rules, params.expand_noise)
     storage.dump(structure_pairs, structures_file(name, level))
 
 

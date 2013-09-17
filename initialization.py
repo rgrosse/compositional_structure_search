@@ -130,7 +130,6 @@ def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
     if old_structure == new_structure:
         return root
     node, old_dist, rule = recursive.find_changed_node(root, old_structure, new_structure)
-    rule_name = grammar.rule2name[old_dist, rule]
 
     old = root.value()
 
@@ -148,26 +147,27 @@ def initialize(data_matrix, root, old_structure, new_structure, num_iter=200):
 
     print 'Initializing %s from %s...' % (grammar.pretty_print(new_structure), grammar.pretty_print(old_structure))
 
-    if rule_name == 'low-rank':
+    if rule == grammar.parse("gg+g"):
         new_node = init_low_rank(inner_data_matrix, num_iter=num_iter)
-    elif rule_name == 'row-clustering':
+    elif rule == grammar.parse("mg+g"):
         isotropic = (node is root)
         new_node = init_row_clustering(inner_data_matrix, isotropic, num_iter=num_iter)
-    elif rule_name == 'col-clustering':
+    elif rule == grammar.parse("gM+g"):
         isotropic = (node is root)
         new_node = init_col_clustering(inner_data_matrix, isotropic, num_iter=num_iter)
-    elif rule_name == 'row-binary':
+    elif rule == grammar.parse("bg+g"):
         new_node = init_row_binary(inner_data_matrix, num_iter=num_iter)
-    elif rule_name == 'col-binary':
+    elif rule == grammar.parse("gB+g"):
         new_node = init_col_binary(inner_data_matrix, num_iter=num_iter)
-    elif rule_name == 'row-chain':
+    elif rule == grammar.parse("cg+g"):
         new_node = init_row_chain(inner_data_matrix, num_iter=num_iter)
-    elif rule_name == 'col-chain':
+    elif rule == grammar.parse("gC+g"):
         new_node = init_col_chain(inner_data_matrix, num_iter=num_iter)
-    elif rule_name == 'sparsity':
+    elif rule == grammar.parse("s(g)"):
         new_node = init_sparsity(inner_data_matrix, node.variance_type, num_iter=num_iter)
     else:
-        raise RuntimeError('Unknown production rule: %s' % rule_name)
+        raise RuntimeError('Unknown production rule: %s ==> %s' % (grammar.pretty_print(old_dist),
+                                                                   grammar.pretty_print(rule)))
 
     root = recursive.splice(root, node, new_node)
 

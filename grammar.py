@@ -1,42 +1,29 @@
 
 import parsing
 
-
-
-
 START = 'g'
 
-PRODUCTION_RULES = [('low-rank',                    'g',     ('+', ('*', 'g', 'g'), 'g')),
-                    ('row-clustering',              'g',     ('+', ('*', 'm', 'g'), 'g')),
-                    ('col-clustering',              'g',     ('+', ('*', 'g', 'M'), 'g')),
-                    ('row-binary',                  'g',     ('+', ('*', 'b', 'g'), 'g')),
-                    ('col-binary',                  'g',     ('+', ('*', 'g', 'B'), 'g')),
-                    ('row-chain',                   'g',     ('+', ('*', 'c', 'g'), 'g')),
-                    ('col-chain',                   'g',     ('+', ('*', 'g', 'C'), 'g')),
-                    ('sparsity',                    'g',     ('s', 'g')),
-                    #('row-clustering-to-binary',    'm',     'b'),
-                    #('col-clustering-to-binary',    'M',     'B'),
-                    #('row-multi-to-clustering',     'm',     ('+', ('*', 'm', 'g'), 'g')),
-                    #('col-multi-to-clustering',     'M',     ('+', ('*', 'g', 'M'), 'g')),
-                    #('row-integ-to-chain',          'c',     ('+', ('*', 'c', 'g'), 'g')),
-                    #('col-integ-to-chain',          'C',     ('+', ('*', 'g', 'C'), 'g')),
-                    ]
+PRODUCTION_RULES = {'low-rank':          [('g',     ('+', ('*', 'g', 'g'), 'g'))],
+                
+                    'clustering':        [('g',     ('+', ('*', 'm', 'g'), 'g')),
+                                          ('g',     ('+', ('*', 'g', 'M'), 'g'))],
+                    
+                    'binary':            [('g',     ('+', ('*', 'b', 'g'), 'g')),
+                                          ('g',     ('+', ('*', 'g', 'B'), 'g'))],
+                    
+                    'chain':             [('g',     ('+', ('*', 'c', 'g'), 'g')),
+                                          ('g',     ('+', ('*', 'g', 'C'), 'g'))],
+                    
+                    'sparsity':          [('g',     ('s', 'g'))],
+                    
+                    'expand-disc':       [('m',     ('+', ('*', 'm', 'g'), 'g')),
+                                          ('M',     ('+', ('*', 'g', 'M'), 'g')),
+                                          ('b',     ('+', ('*', 'b', 'g'), 'g')),
+                                          ('B',     ('+', ('*', 'g', 'B'), 'g'))],
+                    
+                    'm-to-b':            [('m',     'b')],
+                    }
 
-name2rule = dict((name, (left, right)) for name, left, right in PRODUCTION_RULES)
-rule2name = dict(((left, right), name) for name, left, right in PRODUCTION_RULES)
-
-EXPAND_NOISE = True
-
-
-
-def count_leaf(structure, leaf):
-    if type(structure) == str:
-        if structure == leaf:
-            return 1
-        else:
-            return 0
-    else:
-        return sum([count_leaf(child, leaf) for child in structure])
 
 def is_valid(structure):
     if type(structure) == str and structure != 'g':
@@ -45,32 +32,27 @@ def is_valid(structure):
         return False
     return True
 
-def is_factorization(structure):
-    structure = collapse_sums(structure)
-    if type(structure) == str:
-        return True
-    if structure[0] == '+' and len(structure) == 3 and structure[-1] == 'g':
-        return True
-    return False
+def list_successors_helper(structure, rule_names, is_noise, expand_noise=True):
+    rules = reduce(list.__add__, [PRODUCTION_RULES[rn] for rn in rule_names])
 
-
-def list_successors_helper(structure, is_noise=False):
+    if is_noise and not expand_noise:
+        return []
+    
     if type(structure) == str:
-        return [s for n, f, s in PRODUCTION_RULES if f == structure]
+        return [rhs for lhs, rhs in rules if lhs == structure]
+    
     successors = []
     for pos in range(len(structure)):
         is_noise = (structure[0] == '+' and pos == len(structure) - 1)
-        for child_succ in list_successors_helper(structure[pos], is_noise):
+        for child_succ in list_successors_helper(structure[pos], rule_names, is_noise, expand_noise):
             if is_noise and type(child_succ) == tuple and child_succ[0] == 's':
                 continue
             successors.append(structure[:pos] + (child_succ,) + structure[pos+1:])
     return successors
 
-def list_successors(structure):
-    succ = filter(is_valid, list_successors_helper(structure))
-    if not EXPAND_NOISE and type(structure) != str:
-        succ = filter(is_factorization, succ)
-    return succ
+def list_successors(structure, rules, expand_noise=True):
+    successors = list_successors_helper(structure, rules, False, expand_noise)
+    return filter(is_valid, successors)
 
 def collapse_sums(structure):
     if type(structure) == str:
@@ -87,9 +69,8 @@ def collapse_sums(structure):
     else:
         return tuple([collapse_sums(s) for s in structure])
 
-def list_collapsed_successors(structure):
-    #return [collapse_sums(s) for s in list_successors(structure)]
-    return [collapse_sums(s) for s in list_successors_helper(structure)
+def list_collapsed_successors(structure, rule_names, expand_noise=True):
+    return [collapse_sums(s) for s in list_successors_helper(structure, rule_names, False, expand_noise)
             if is_valid(collapse_sums(s))]
 
 def pretty_print(structure, spaces=True, quotes=True):
