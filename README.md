@@ -4,7 +4,7 @@ This software package implements the algorithms described in the paper
 > "Exploiting compositionality to explore a large space of model structures," UAI 2012.
 
 
-## Requirements
+# Requirements
 
 This code base depends on a number of Python packages, most of which are pretty standard.
 Most of the packages are available through [Enthought Canopy](https://www.enthought.com/products/canopy/),
@@ -26,7 +26,7 @@ More recent versions than the ones listed above should work fine, though unfortu
 the interfaces to some SciPy routines have a tendency to change without warning...
 
 
-## Configuration
+# Configuration
 
 In order to run the structure search, you need to specify some local configuration parameters
 in `config.py`. First, in the main project directory, copy the template:
@@ -56,7 +56,7 @@ entering a password. We realize this might not correspond to your situation, so 
 how you can write your own job scheduler module geared towards the clusters at your own institution.
 
 
-## Running the example
+# Running the example
 
 We provide an example of how to run the structure search in `example.py`. This runs the
 structure search on the mammals dataset of Kemp et al. (2006), "Learning systems of concepts
@@ -87,7 +87,7 @@ change `QuickParams` to `SmallParams` in `example.py`.
 
 
 
-## Running the structure search
+# Running the structure search
 
 Suppose you have a real-valued matrix `X` you're interested in learning the structure of,
 in the form of a NumPy array. The first step is to create a `DataMatrix` instance:
