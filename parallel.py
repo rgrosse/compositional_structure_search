@@ -53,6 +53,10 @@ def _remove_status_files(key):
             full_path = os.path.join(_status_path(key), fname)
             os.remove(full_path)
 
+def escape(job):
+    return ' '.join(["'" + arg.replace("'", r"\'") + "'"
+                     for arg in job])
+
 def run_command(command, jobs, machines=None, chdir=None):
     args = ['parallel']
     if machines is not None:
@@ -64,7 +68,7 @@ def run_command(command, jobs, machines=None, chdir=None):
     args += [command]
 
     p = subprocess.Popen(args, shell=False, stdin=subprocess.PIPE)
-    p.communicate('\n'.join(jobs))
+    p.communicate('\n'.join(map(escape, jobs)))
 
 def run(script, jobs, machines=None, key=None, email=False, rm_status=True):
     if not _executable_exists('parallel'):

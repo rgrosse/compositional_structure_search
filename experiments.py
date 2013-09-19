@@ -22,10 +22,6 @@ from utils import misc, storage
 
 import single_process
 import parallel
-if config.SCHEDULER == 'single_process':
-    schedule_mod = single_process
-elif config.SCHEDULER == 'parallel':
-    schedule_mod = parallel
 
 
 ####################### parameters #############################################
@@ -524,10 +520,11 @@ def sequence_of_structures(name):
 ############################# Job scheduling ###################################
 
 def run_jobs(jobs, args, key):
+    jobs = [tuple(map(str, job)) for job in jobs]
     if config.SCHEDULER == 'parallel':
         machines = parallel.parse_machines(args.machines, args.njobs)
         parallel.run('experiments.py', jobs, machines=machines, key=key)
-    elif config.SCHEULER == 'single_process':
+    elif config.SCHEDULER == 'single_process':
         single_process.run('experiments.py', jobs)
     else:
         raise RuntimeError('Unknown scheduler: %s' % config.SCHEDULER)
@@ -543,12 +540,10 @@ def initial_samples_jobs(name, level):
 
     params = storage.load(params_file(name))
 
-    jobs = ["init_job %s %d '%s' %d %d" % (name, level, pretty_print(s), split_id, sample_id)
+    return [('init_job', name, level, pretty_print(s), split_id, sample_id)
             for s in winning_structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
-
-    return jobs
 
 def initial_samples_key(name, level):
     return '%s_init_%d' % (name, level)
@@ -557,8 +552,7 @@ def evaluation_jobs(name, level):
     params = storage.load(params_file(name))
     structures = storage.load(structures_file(name, level))
     
-    return ["eval_job %s %d '%s' '%s' %d %d" %
-            (name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
+    return [('eval_job', name, level, pretty_print(init_s), pretty_print(s), split_id, sample_id)
             for init_s, s in structures
             for split_id in range(params.num_splits)
             for sample_id in range(params.num_samples)]
@@ -569,7 +563,7 @@ def evaluation_key(name, level):
 def final_model_jobs(name):
     params = storage.load(params_file(name))
     
-    return ["final_job %s %d" % (name, i) for i in range(params.num_samples)]
+    return [('final_job', name, i) for i in range(params.num_samples)]
 
 def final_model_key(name):
     return '%s_final' % name
