@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 import smtplib
 import socket
 import subprocess
@@ -45,7 +46,12 @@ def _executable_exists(command):
 
     return False
 
-    
+def _remove_status_files(key):
+    fnames = os.listdir(_status_path(key))
+    for fname in fnames:
+        if re.match(r'status-.*.txt', fname):
+            full_path = os.path.join(_status_path(key), fname)
+            os.remove(full_path)
 
 def run_command(command, jobs, machines=None, chdir=None):
     args = ['parallel']
@@ -78,10 +84,10 @@ def run(script, jobs, machines=None, key=None, email=False, rm_status=True):
         outstr.close()
 
         if rm_status:
-            subprocess.call('cd %s; rm status-*.txt' % _status_path(key), shell=True)
+            _remove_status_files(key)
         
-    command = 'python utils/parallel.py %s %s' % (key, script)
-    run_command(command, jobs, machines=machines, chdir=config.CODE_PATH)
+    command = 'python parallel.py %s %s' % (key, script)
+    run_command(command, jobs, machines=machines, chdir=os.getcwd())
 
     if email:
         if key is not None:

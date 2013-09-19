@@ -1,7 +1,6 @@
 # experiment directories
 RESULTS_PATH = '/path/to/results'
 CACHE_PATH = '/path/to/cached'
-CODE_PATH = '/path/to/compositional_structure_search'
 REPORT_PATH = '/path/to/reports'
 
 # 'single_process' to run in a single process, 'parallel' to use GNU Parallel

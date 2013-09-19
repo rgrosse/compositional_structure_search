@@ -180,7 +180,7 @@ def nfold_cv(nrows, ncols, nsplits):
     return splits
 
 def check_required_directories():
-    config_vars = ['RESULTS_PATH', 'CODE_PATH', 'JOBS_PATH', 'REPORT_PATH']
+    config_vars = ['RESULTS_PATH', 'JOBS_PATH', 'REPORT_PATH']
     for v in config_vars:
         if not hasattr(config, v):
             raise RuntimeError('Need to specify %s in config.py' % v)
