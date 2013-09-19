@@ -25,6 +25,11 @@ There are two additional requirements, which are both `easy_install`able:
 More recent versions than the ones listed above should work fine, though unfortunately
 the interfaces to some SciPy routines have a tendency to change without warning...
 
+Also, if you want to distribute jobs across multiple cores or machines (highly recommended), you
+will need to do one of the following:
+- install [GNU Parallel](www.gnu.org/software/parallel) (see Configuration section for more details)
+- write a scheduler which better matches your own computing resources (section TODO)
+
 
 # Configuration
 
@@ -64,7 +69,7 @@ with an infinite relational model." This is a 50 x 85 matrix where the rows repr
 different species of mammal, the columns represent attributes, and each entry is a binary
 value representing subjects' judgments of whether the animal has that attribute. Our structure
 search did not result in a clear structure for this dataset, but it serves as an example which
-can be run quickly (3.2 CPU minutes for me). 
+can be run quickly (1.4 CPU minutes for me). 
 
 After following the configuration directions above, run the following from the command line:
 
