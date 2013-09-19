@@ -32,6 +32,19 @@ def _run_job(script, key, args):
             print >> outstr, 'failed:', args
         outstr.close()
 
+def _executable_exists(command):
+    # taken from stackoverflow.com/questions/377017/test-if-executable-exists-in-python
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    for path in os.environ['PATH'].split(os.pathsep):
+        path = path.strip('"')
+        exe_file = os.path.join(path, command)
+        if is_exe(exe_file):
+            return True
+
+    return False
+
     
 
 def run_command(command, jobs, machines=None, chdir=None):
@@ -48,6 +61,13 @@ def run_command(command, jobs, machines=None, chdir=None):
     p.communicate('\n'.join(jobs))
 
 def run(script, jobs, machines=None, key=None, email=False, rm_status=True):
+    if not _executable_exists('parallel'):
+        raise RuntimeError('GNU Parallel executable not found.')
+    if not hasattr(config, 'JOBS_PATH'):
+        raise RuntimeError('Need to specify JOBS_PATH in config.py')
+    if not os.path.exists(config.JOBS_PATH):
+        raise RuntimeError('Path chosen for config.JOBS_PATH does not exist: %s' % config.JOBS_PATH)
+    
     if key is not None:
         if not os.path.exists(_status_path(key)):
             os.mkdir(_status_path(key))
