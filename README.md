@@ -27,6 +27,7 @@ the interfaces to some SciPy routines have a tendency to change without warning.
 
 Also, if you want to distribute jobs across multiple cores or machines (highly recommended), you
 will need to do one of the following:
+
 - install [GNU Parallel](www.gnu.org/software/parallel) (see Configuration section for more details)
 - write a scheduler which better matches your own computing resources (section TODO)
 
