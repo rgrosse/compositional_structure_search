@@ -313,8 +313,12 @@ def extract_non_gaussian_part(node):
         fixed_term, gaussian_term, chain_term = collect_terms(extract_terms(scale_node))
         assert chain_term is None
         scale_mu, scale_Sigma = gaussian_term.mu, gaussian_term.Sigma
-        assert node.bias_type == 'col'
-        scale_mu += node.bias.ravel()
+        if node.bias_type == 'col':
+            scale_mu += node.bias.ravel()
+        elif node.bias_type == 'scalar':
+            scale_mu += node.bias
+        else:
+            raise RuntimeError('Invalid bias type: %s' % node.bias_type)
         sigma_sq_approx = (node.value() ** 2).mean(0)
         return [GSMPredictiveDistribution(scale_components, scale_mu, scale_Sigma,
                                           sigma_sq_approx, np.eye(node.n))]

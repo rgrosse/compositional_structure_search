@@ -13,7 +13,7 @@ cached_pi = None
 MAX_IDXS = 500
 
 
-def score_row_predictive_variational(train_data_matrix, root, test_data_matrix):
+def score_row_predictive_variational(train_data_matrix, root, test_data_matrix, num_steps_ais=2000):
     N = test_data_matrix.m_orig
     predictive_info_orig = predictive_distributions.compute_predictive_info(train_data_matrix, root, N)
     predictive_info = predictive_distributions.remove_gsm(predictive_info_orig)
@@ -48,7 +48,8 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix):
             components, mu, Sigma = predictive_info_orig.predictive_for_row(row, idxs)
             X = test_data_matrix.observations.values[i, idxs]
             X = X[nax, :]
-            result[i] = ais_gsm.compute_likelihood(X, predictive_info_orig, [reps], np.array([result[i]]))[0]
+            result[i] = ais_gsm.compute_likelihood(X, predictive_info_orig, [reps], np.array([result[i]]),
+                                                   num_steps=num_steps_ais)[0]
 
         pbar.update(i)
     pbar.finish()
@@ -56,8 +57,9 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix):
 
     return result
 
-def score_col_predictive_variational(train_data_matrix, root, test_data_matrix):
-    return score_row_predictive_variational(train_data_matrix.transpose(), root.transpose(), test_data_matrix.transpose())
+def score_col_predictive_variational(train_data_matrix, root, test_data_matrix, num_steps_ais=2000):
+    return score_row_predictive_variational(train_data_matrix.transpose(), root.transpose(),
+                                            test_data_matrix.transpose(), num_steps_ais=num_steps_ais)
 
 
 
@@ -71,10 +73,11 @@ def no_structure_col_loglik(train_data, col_test_data):
     return no_structure_row_loglik(train_data.transpose(), col_test_data.transpose())
     
 def evaluate_model(train_data, root, row_test_data, col_test_data, label='', avg_col_mean=True,
-                   init_row_loglik=None, init_col_loglik=None, num_steps=2000):
+                   init_row_loglik=None, init_col_loglik=None, num_steps_ais=2000):
 
     print 'Scoring row predictive likelihood...'
-    row_loglik_all = score_row_predictive_variational(train_data, root, row_test_data)
+    row_loglik_all = score_row_predictive_variational(train_data, root, row_test_data,
+                                                      num_steps_ais=num_steps_ais)
     if avg_col_mean:
         if init_row_loglik is None:
             init_row_loglik = no_structure_row_loglik(train_data, row_test_data)
@@ -82,7 +85,8 @@ def evaluate_model(train_data, root, row_test_data, col_test_data, label='', avg
                                       init_row_loglik + np.log(0.01))
 
     print 'Scoring column predictive likelihood...'
-    col_loglik_all = score_col_predictive_variational(train_data, root, col_test_data)
+    col_loglik_all = score_col_predictive_variational(train_data, root, col_test_data,
+                                                      num_steps_ais=num_steps_ais)
     if avg_col_mean:
         if init_col_loglik is None:
             init_col_loglik = no_structure_col_loglik(train_data, col_test_data)

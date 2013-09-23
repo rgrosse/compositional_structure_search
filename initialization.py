@@ -95,7 +95,7 @@ def init_sparsity(data_matrix, mu_Z_mode, num_iter=200):
         by_column = True
     elif mu_Z_mode == 'scalar':
         by_column = False
-    
+
     # currently, data_matrix should always be real-valued with no missing values, so this just
     # passes on data_matrix.observations.values; we may want to replace it with interval observations
     # obtained from slice sampling

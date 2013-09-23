@@ -289,7 +289,7 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
     row_loglik, col_loglik = scoring.evaluate_model(X_train, root, X_row_test, X_col_test,
                                                     init_row_loglik=init_row_loglik,
                                                     init_col_loglik=init_col_loglik,
-                                                    num_steps=params.num_steps_ais)
+                                                    num_steps_ais=params.num_steps_ais)
     return row_loglik, col_loglik
 
 def run_model(name, level, init_structure, structure, split_id, sample_id, save=True, save_sample=False):

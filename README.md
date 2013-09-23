@@ -70,7 +70,7 @@ with an infinite relational model." This is a 50 x 85 matrix where the rows repr
 different species of mammal, the columns represent attributes, and each entry is a binary
 value representing subjects' judgments of whether the animal has that attribute. Our structure
 search did not result in a clear structure for this dataset, but it serves as an example which
-can be run quickly (1.4 CPU minutes for me). 
+can be run quickly (2 CPU minutes for me). 
 
 After following the configuration directions above, run the following from the command line:
 
