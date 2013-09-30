@@ -7,7 +7,7 @@ In particular, it takes an input matrix, runs the structure search, and outputs 
 summarizing the choices made at each step. There is also a script which runs the synthetic
 data experiments from the paper. 
 
-# Caveats
+## Caveats
 
 This is a research prototype, and I've made some simplifying assumptions which may or may
 not match your situation. In particular,
@@ -28,7 +28,7 @@ I am working on a newer version of the software package which shouldn't have the
 limitations.
 
 
-# Requirements
+## Requirements
 
 This code base depends on a number of Python packages, most of which are pretty standard.
 Most of the packages are available through [Enthought Canopy](https://www.enthought.com/products/canopy/),
@@ -60,7 +60,7 @@ will need to do one of the following:
 - write a scheduler which better matches your own computing resources ([see below](#ownsched))
 
 
-# Configuration
+## Configuration
 
 In order to run the structure search, you need to specify some local configuration parameters
 in `config.py`. First, in the main project directory, copy the template:
@@ -89,7 +89,7 @@ entering a password. We realize this might not correspond to your situation, so 
 for how you can write your own job scheduler module geared towards the clusters at your own institution.
 
 
-# Running the example
+## Running the example
 
 We provide an example of how to run the structure search in `example.py`. This runs the
 structure search on the mammals dataset of Kemp et al. (2006), "Learning systems of concepts
@@ -119,7 +119,7 @@ change `QuickParams` to `SmallParams` in `example.py`.
 
 
 
-# Running the structure search
+## Running the structure search
 
 Suppose you have a real-valued matrix `X` you're interested in learning the structure of,
 in the form of a NumPy array. The first step is to create a `DataMatrix` instance:
@@ -168,7 +168,7 @@ For example,
 If all goes well, a report will be saved to `experiment_name/results.txt` under `config.REPORT_PATH`.
 
 
-# <a name="ownsched" /> Using your own scheduler
+## <a name="ownsched" /> Using your own scheduler
 
 As mentioned above, the experiment script assumes you have GNU Parallel installed, and that you're 
 able to SSH into machines without entering a password. This might not match your situation; for instance,
@@ -194,7 +194,7 @@ the functions in `storage.py` to read and write from whatever storage system is 
 machines.
 
 
-# Organization of the code
+## Organization of the code
 
 The main code directly contains the following files which handle the logic of the experiments,
 and are described above:
