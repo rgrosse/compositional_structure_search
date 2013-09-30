@@ -79,76 +79,76 @@ def md5(obj):
 
 def experiment_dir(name):
     """Main directory used for all structure search results."""
-    return os.path.join(config.RESULTS_PATH, name)
+    return storage.join(config.RESULTS_PATH, name)
 
 def params_file(name):
-    return os.path.join(experiment_dir(name), 'params.pk')
+    return storage.join(experiment_dir(name), 'params.pk')
 
 def data_file(name):
     """The original data matrix, stored as an observations.DataMatrix instance."""
-    return os.path.join(experiment_dir(name), 'data.pk')
+    return storage.join(experiment_dir(name), 'data.pk')
 
 def splits_file(name):
     """The cross-validation splits, stored as a list of (train_rows, train_cols,
     test_rows, test_cols) tuples."""
-    return os.path.join(experiment_dir(name), 'splits.pk')
+    return storage.join(experiment_dir(name), 'splits.pk')
 
 def clean_data_file(name):
     """The observation matrix before noise was added, if applicable."""
-    return os.path.join(experiment_dir(name), 'clean-data.pk')
+    return storage.join(experiment_dir(name), 'clean-data.pk')
 
 def components_file(name):
     """The true decomposition, as a recursive.Decomp instance, if applicable."""
-    return os.path.join(experiment_dir(name), 'components.pk')
+    return storage.join(experiment_dir(name), 'components.pk')
 
 def level_dir(name, level):
     """The directory containing the results of one level of the search."""
-    return os.path.join(experiment_dir(name), 'level%d' % level)
+    return storage.join(experiment_dir(name), 'level%d' % level)
 
 def structures_file(name, level):
     """The list of all structures to be evaluated in a given level of the search.
     Stored as a list of (init_structure, successor_structure) pairs."""
-    return os.path.join(level_dir(name, level), 'structures.pk')
+    return storage.join(level_dir(name, level), 'structures.pk')
 
 def init_samples_file(name, level, structure, split_id, sample_id):
     """The decomposition to be used as the initialization for a given structure, i.e.
     one of the top performing structures from the previous level."""
-    return os.path.join(level_dir(name, level), 'init',
+    return storage.join(level_dir(name, level), 'init',
                         'samples-%s-%d-%d.pk' % (md5(structure), split_id, sample_id))
 
 def init_scores_file(name, level, structure, split_id, sample_id):
     """The row and column log-likelihood scores for the model used as an initialization.
     Stored as a (row_log_likelihood, column_log_likelihood) pair, where each is a vector
     giving the performance on all the test rows/columns."""
-    return os.path.join(level_dir(name, level), 'init',
+    return storage.join(level_dir(name, level), 'init',
                         'scores-%s-%d-%d.pk' % (md5(structure), split_id, sample_id))
 
 def samples_file(name, level, structure, split_id, sample_id):
     """A posterior sample for a given structure."""
-    return os.path.join(config.CACHE_PATH,  name,
+    return storage.join(config.CACHE_PATH,  name,
                         'level%d' % level, md5(structure), 'samples-%d-%d.pk' % (split_id, sample_id))
 
 def scores_file(name, level, structure, split_id, sample_id):
     """The predictive log-likelihood scores on held-out data for a given CV split."""
-    return os.path.join(level_dir(name, level), md5(structure), 'scores-%d-%d.pk' % (split_id, sample_id))
+    return storage.join(level_dir(name, level), md5(structure), 'scores-%d-%d.pk' % (split_id, sample_id))
 
 def collected_scores_file(name, level, structure):
     """The predictive log-likelihood scores for a given structure, collected over all CV
     splits and ordered by the indices in the original data matrix."""
-    return os.path.join(level_dir(name, level), md5(structure), 'collected-scores.pk')
+    return storage.join(level_dir(name, level), md5(structure), 'collected-scores.pk')
 
 def winning_structure_file(name, level):
     """The highest performing structure at a given level of the search."""
-    return os.path.join(level_dir(name, level), 'winning-structure.pk')
+    return storage.join(level_dir(name, level), 'winning-structure.pk')
 
 def running_time_file(name, level, structure, split_id, sample_id):
     """The running time for sampling from the posterior and computing predictive likelihood."""
-    return os.path.join(level_dir(name, level), md5(structure),
+    return storage.join(level_dir(name, level), md5(structure),
                         'time-%d-%d.pk' % (split_id, sample_id))
 
 def winning_samples_file(name, sample_id):
     """Posterior samples from each model in the sequence chosen by the structure search."""
-    return os.path.join(experiment_dir(name), 'winning-samples-%d.pk' % sample_id)
+    return storage.join(experiment_dir(name), 'winning-samples-%d.pk' % sample_id)
 
 def report_dir(name):
     return os.path.join(config.REPORT_PATH, name)
@@ -180,7 +180,7 @@ def check_required_directories():
     for v in config_vars:
         if not hasattr(config, v):
             raise RuntimeError('Need to specify %s in config.py' % v)
-        if not os.path.exists(getattr(config, v)):
+        if not storage.exists(getattr(config, v)):
             raise RuntimeError('Directory specified in config.%s does not exist: %s' %
                                (v, getattr(config, v)))
 
@@ -189,8 +189,8 @@ def init_experiment(name, data_matrix, params, components=None, clean_data_matri
     information, to files, and generating cross-validation splits."""
     check_required_directories()
     
-    if not os.path.exists(experiment_dir(name)):
-        os.mkdir(experiment_dir(name))
+    if not storage.exists(experiment_dir(name)):
+        storage.mkdir(experiment_dir(name))
 
     storage.dump(params, params_file(name))
     splits = nfold_cv(data_matrix.m, data_matrix.n, params.num_splits)
@@ -223,7 +223,7 @@ def list_structure_pairs(init_structures, rules, expand_noise):
 def init_level(name, level):
     """Initialize a given level of the search by saving all of the structures which need
     to be evaluated."""
-    if not os.path.exists(experiment_dir(name)):
+    if not storage.exists(experiment_dir(name)):
         raise RuntimeError('Experiment %s not yet initialized.' % name)
 
     params = storage.load(params_file(name))
@@ -618,7 +618,7 @@ def print_failures(name, outfile=sys.stdout):
             for split_id in range(params.num_splits):
                 for sample_id in range(params.num_samples):
                     fname = scores_file(name, level, structure, split_id, sample_id)
-                    if os.path.exists(fname):
+                    if storage.exists(fname):
                         row_loglik, col_loglik = storage.load(fname)
                         if np.all(np.isfinite(row_loglik)) and np.all(np.isfinite(col_loglik)):
                             total_ok += 1

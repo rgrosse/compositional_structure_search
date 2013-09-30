@@ -17,6 +17,10 @@ Python packages which are included in Canopy:
 - [SciPy](http://www.scipy.org/) (I used 0.12.0)
 - [scikit-learn](http://scikit-learn.org/stable/)  (I used 0.13.1)
 
+Note: I've been told that [Anaconda Python](https://store.continuum.io/cshop/anaconda/) is an
+alternative distribution which includes these same packages, has a comparable academic license,
+and is easier to get running. I've never tried it myself, though.
+
 There are two additional requirements, which are both `easy_install`able:
 
 - [termcolor](https://pypi.python.org/pypi/termcolor)

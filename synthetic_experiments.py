@@ -224,7 +224,7 @@ def print_failures(prefix, outfile=sys.stdout):
                     for sample_id in range(params.num_samples):
                         ok = False
                         fname = experiments.scores_file(expt_name, level, structure, split_id, sample_id)
-                        if os.path.exists(fname):
+                        if storage.exists(fname):
                             row_loglik, col_loglik = storage.load(fname)
                             if np.all(np.isfinite(row_loglik)) and np.all(np.isfinite(col_loglik)):
                                 ok = True

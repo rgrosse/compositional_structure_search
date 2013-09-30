@@ -22,3 +22,12 @@ def dump(obj, fname):
     cPickle.dump(obj, open(fname, 'w'), protocol=2)
 
 
+def exists(fname):
+    return os.path.exists(fname)
+
+def mkdir(dirname):
+    os.mkdir(dirname)
+
+def join(*args):
+    return os.path.join(*args)
+
