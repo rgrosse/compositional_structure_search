@@ -383,18 +383,16 @@ def ais(ais_model, t_schedule, variational_representations):
     return total
 
 # __init__(self, scale_samplers, sigma_sq_approx, evidence_Sigma):
-def compute_likelihood(X, predictive_info, variational_representations, init_partition_function,
+def compute_likelihood(X, components, Sigma, variational_representations, init_partition_function,
                        t_schedule=None, num_steps=1000):
-    assert np.allclose(predictive_info.mu, 0.)   # can't do chains yet
-    assert predictive_info.Sigma.ndim == 2
 
     samplers = []
-    for comp in predictive_info.components:
+    for comp in components:
         if isinstance(comp, predictive_distributions.MultinomialPredictiveDistribution):
-            sampler = MultinomialSampler(comp.pi, comp.centers, predictive_info.Sigma)
+            sampler = MultinomialSampler(comp.pi, comp.centers, Sigma)
             
         elif isinstance(comp, predictive_distributions.BernoulliPredictiveDistribution):
-            sampler = BernoulliSampler(comp.pi, comp.A, predictive_info.Sigma)
+            sampler = BernoulliSampler(comp.pi, comp.A, Sigma)
             
         elif isinstance(comp, predictive_distributions.GSMPredictiveDistribution):
             inner_samplers = []
@@ -413,12 +411,12 @@ def compute_likelihood(X, predictive_info, variational_representations, init_par
             igs = InnerGaussianSampler(comp.scale_mu, comp.scale_Sigma, comp.sigma_sq_approx)
             inner_samplers.append(igs)
 
-            sampler = GSMSampler(inner_samplers, comp.sigma_sq_approx, predictive_info.Sigma,
+            sampler = GSMSampler(inner_samplers, comp.sigma_sq_approx, Sigma,
                                  comp.A)
 
         samplers.append(sampler)
 
-    ais_model = AISModel(samplers, X, predictive_info.Sigma, init_partition_function)
+    ais_model = AISModel(samplers, X, Sigma, init_partition_function)
             
     if t_schedule is None:
         if SIGMOID_SCHEDULE:

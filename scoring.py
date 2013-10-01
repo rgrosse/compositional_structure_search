@@ -46,9 +46,10 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix, 
 
         if predictive_distributions.has_gsm(predictive_info_orig):
             components, mu, Sigma = predictive_info_orig.predictive_for_row(row, idxs)
+            assert np.allclose(mu, 0.)   # can't do chains yet
             X = test_data_matrix.observations.values[i, idxs]
             X = X[nax, :]
-            result[i] = ais_gsm.compute_likelihood(X, predictive_info_orig, [reps], np.array([result[i]]),
+            result[i] = ais_gsm.compute_likelihood(X, components, Sigma, [reps], np.array([result[i]]),
                                                    num_steps=num_steps_ais)[0]
 
         pbar.update(i)
