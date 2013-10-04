@@ -34,7 +34,7 @@ class DefaultParams:
     save_samples = False           # Whether to save the posterior samples (can take up lots of disk space)
     gibbs_steps = 200              # Number of Gibbs steps for sampling from the posterior
     search_depth = 3               # Number of steps in the search
-    max_dim_predictive = 500       # Maximum number of dimensions to use in predictive likelihood scoring
+    max_dim_predictive = None      # Maximum number of dimensions to use in predictive likelihood scoring
 
     # production rules (see grammar.py)
     rules = ['low-rank', 'clustering', 'binary', 'chain', 'sparsity']
@@ -62,6 +62,7 @@ class LargeParams(DefaultParams):
     """Reasonable parameter settings for larger matrices"""
     num_splits = 2
     num_samples = 3
+    max_dim_predictive = 500         # use a subset of the dimensions to save time
 
 class QuickParams(DefaultParams):
     """Parameter settings for debugging, so you can quickly run jobs and make sure they don't crash"""
