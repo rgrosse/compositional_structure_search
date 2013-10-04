@@ -446,18 +446,6 @@ def dot(A, b):
 def vdot(x, y):
     return (x*y).sum(-1)
 
-def my_inv(A):
-    """Compute the inverse of a symmetric positive definite matrix."""
-    cho = scipy.linalg.lapack.dpotrf(A)
-    choinv = scipy.linalg.lapack.dtrtri(cho[0])
-    upper = scipy.linalg.lapack.dlauum(choinv[0])[0]
-
-    # upper is the upper triangular entries of A^{-1}, so need to fill in the
-    # lower triangular ones; unfortunately this has nontrivial overhead
-    temp = np.diag(upper)
-    return upper + upper.T - np.diag(temp)
-
-
 def transp(A):
     return A.swapaxes(-2, -1)
 

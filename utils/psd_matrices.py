@@ -2,7 +2,7 @@ import itertools
 import numpy as np
 nax = np.newaxis
 
-from misc import array_map, my_inv, full_shape, broadcast, dot, process_slice, match_shapes, _err_string, set_err_info, transp
+from misc import array_map, full_shape, broadcast, dot, process_slice, match_shapes, _err_string, set_err_info, transp
 
 class BaseMatrix:
     def __init__(self):
@@ -66,12 +66,12 @@ class FullMatrix(BaseMatrix):
 
     def pinv(self):
         try:
-            return FullMatrix(array_map(my_inv, [self._S], self.ndim))
+            return FullMatrix(array_map(np.linalg.inv, [self._S], self.ndim))
         except np.linalg.LinAlgError:
             return FullMatrix(array_map(np.linalg.pinv, [self._S], self.ndim))
 
     def inv(self):
-        return FullMatrix(array_map(my_inv, [self._S], self.ndim))
+        return FullMatrix(array_map(np.linalg.inv, [self._S], self.ndim))
 
     def __add__(self, other):
         other = other.full()
@@ -102,7 +102,7 @@ class FullMatrix(BaseMatrix):
 
     def conv(self, other):
         other = other.full()
-        P = array_map(my_inv, [self._S + other._S], self.ndim)
+        P = array_map(np.linalg.inv, [self._S + other._S], self.ndim)
         return FullMatrix(dot(self._S, dot(P, other._S)))
 
     def sqrt_dot(self, x):
