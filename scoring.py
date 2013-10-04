@@ -10,9 +10,6 @@ from utils import misc
 CACHE = False
 cached_pi = None
 
-MAX_IDXS = 500
-
-
 def score_row_predictive_variational(train_data_matrix, root, test_data_matrix, num_steps_ais=2000):
     N = test_data_matrix.m_orig
     predictive_info_orig = predictive_distributions.compute_predictive_info(train_data_matrix, root, N)
@@ -23,9 +20,6 @@ def score_row_predictive_variational(train_data_matrix, root, test_data_matrix, 
     for i, row in enumerate(test_data_matrix.row_ids):
         idxs = np.where(test_data_matrix.observations.mask[i, :])[0]
 
-        if MAX_IDXS is not None and idxs.size > MAX_IDXS:
-            idxs = idxs[:MAX_IDXS]
-        
         components, mu, Sigma = predictive_info.predictive_for_row(row, idxs)
 
         estimators = []
@@ -74,23 +68,23 @@ def no_structure_col_loglik(train_data, col_test_data):
     return no_structure_row_loglik(train_data.transpose(), col_test_data.transpose())
     
 def evaluate_model(train_data, root, row_test_data, col_test_data, label='', avg_col_mean=True,
-                   init_row_loglik=None, init_col_loglik=None, num_steps_ais=2000):
+                   init_row_loglik=None, init_col_loglik=None, num_steps_ais=2000, max_dim=None):
 
     print 'Scoring row predictive likelihood...'
-    row_loglik_all = score_row_predictive_variational(train_data, root, row_test_data,
-                                                      num_steps_ais=num_steps_ais)
+    row_loglik_all = score_row_predictive_variational(
+        train_data[:, :max_dim], root[:, :max_dim], row_test_data[:, :max_dim], num_steps_ais=num_steps_ais)
     if avg_col_mean:
         if init_row_loglik is None:
-            init_row_loglik = no_structure_row_loglik(train_data, row_test_data)
+            init_row_loglik = no_structure_row_loglik(train_data[:, :max_dim], row_test_data[:, :max_dim])
         row_loglik_all = np.logaddexp(row_loglik_all + np.log(0.99),
                                       init_row_loglik + np.log(0.01))
 
     print 'Scoring column predictive likelihood...'
-    col_loglik_all = score_col_predictive_variational(train_data, root, col_test_data,
-                                                      num_steps_ais=num_steps_ais)
+    col_loglik_all = score_col_predictive_variational(
+        train_data[:max_dim, :], root[:max_dim, :], col_test_data[:max_dim, :], num_steps_ais=num_steps_ais)
     if avg_col_mean:
         if init_col_loglik is None:
-            init_col_loglik = no_structure_col_loglik(train_data, col_test_data)
+            init_col_loglik = no_structure_col_loglik(train_data[:max_dim, :], col_test_data[:max_dim, :])
         col_loglik_all = np.logaddexp(col_loglik_all + np.log(0.99),
                                       init_col_loglik + np.log(0.01))
 

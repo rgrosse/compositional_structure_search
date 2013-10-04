@@ -34,6 +34,7 @@ class DefaultParams:
     save_samples = False           # Whether to save the posterior samples (can take up lots of disk space)
     gibbs_steps = 200              # Number of Gibbs steps for sampling from the posterior
     search_depth = 3               # Number of steps in the search
+    max_dim_predictive = 500       # Maximum number of dimensions to use in predictive likelihood scoring
 
     # production rules (see grammar.py)
     rules = ['low-rank', 'clustering', 'binary', 'chain', 'sparsity']
@@ -289,7 +290,8 @@ def evaluate_decomp(name, level, init_structure, split_id, sample_id, root):
     row_loglik, col_loglik = scoring.evaluate_model(X_train, root, X_row_test, X_col_test,
                                                     init_row_loglik=init_row_loglik,
                                                     init_col_loglik=init_col_loglik,
-                                                    num_steps_ais=params.num_steps_ais)
+                                                    num_steps_ais=params.num_steps_ais,
+                                                    max_dim=params.max_dim_predictive)
     return row_loglik, col_loglik
 
 def run_model(name, level, init_structure, structure, split_id, sample_id, save=True, save_sample=False):
@@ -371,6 +373,7 @@ def structureless_scores(name):
     if isinstance(data_matrix, recursive.Decomp):
         data_matrix = observations.DataMatrix.from_real_values(data_matrix.root.value())
     splits = storage.load(splits_file(name))
+    params = storage.load(params_file(name))
 
     row_loglik = np.array([])
     col_loglik = np.array([])
@@ -381,10 +384,12 @@ def structureless_scores(name):
         X_row_test = data_matrix[test_rows[:, nax], train_cols[nax, :]]
         X_col_test = data_matrix[train_rows[:, nax], test_cols[nax, :]]
 
-        curr_row_loglik = scoring.no_structure_row_loglik(X_train, X_row_test)
+        curr_row_loglik = scoring.no_structure_row_loglik(
+            X_train[:, :params.max_dim_predictive], X_row_test[:, :params.max_dim_predictive])
         row_loglik = np.concatenate([row_loglik, curr_row_loglik])
         
-        curr_col_loglik = scoring.no_structure_col_loglik(X_train, X_col_test)
+        curr_col_loglik = scoring.no_structure_col_loglik(
+            X_train[:params.max_dim_predictive, :], X_col_test[:params.max_dim_predictive, :])
         col_loglik = np.concatenate([col_loglik, curr_col_loglik])
 
         num_entries += train_cols.size * test_rows.size + train_rows.size * test_cols.size
