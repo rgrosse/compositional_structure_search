@@ -197,105 +197,87 @@ def sample_col_noise(N):
         
 
 
-def combine_precisions(Sigma_v, Lambda_y):
-    """compute (Sigma_v + Lambda_y^{-1})^{-1}, where Lambda_y may be low rank"""
-    d, Q = scipy.linalg.eigh(Lambda_y)
-    zero_count = np.sum(d < 1e-10)
-    if zero_count == Lambda_y.shape[0]:
-        return np.zeros(Lambda_y.shape)
-    Q = Q[:,zero_count:]
 
-    Sigma_v_proj = np.dot(np.dot(Q.T, Sigma_v), Q)
-    Lambda_y_proj = np.dot(np.dot(Q.T, Lambda_y), Q)
-    ans_proj = scipy.linalg.inv(Sigma_v_proj + scipy.linalg.inv(Lambda_y_proj))
-    return np.dot(np.dot(Q, ans_proj), Q.T)
+def kalman_filter_diag(mu_0, sigma_sq_0, sigma_sq_v, lam, y):
+    ndim, ntime = y.shape
+    mu_forward = np.zeros((ndim, ntime))
+    sigma_sq_forward = np.zeros((ndim, ntime))
+    mu_forward[:, 0] = mu_0
+    sigma_sq_forward[:, 0] = sigma_sq_0
 
-def integral_from_information(Lambda, J, c):
-    """Given the information form of an unnormalized gaussian
-            f(x) = -0.5 * x^T Lambda x - J^T x - c,
-    compute the integral."""
-    if np.isscalar(Lambda):
-        return 0.5 * np.log(2*np.pi) - 0.5 * np.log(Lambda) - c + 0.5 * J**2 / Lambda
-    else:
-        n = J.size
-        d, Q = scipy.linalg.eigh(Lambda)
-        return 0.5 * n * np.log(2*np.pi) - 0.5 * np.sum(np.log(d)) - c + 0.5 * np.dot(np.dot(J, np.linalg.inv(Lambda)), J)
+    a = b = 1.
 
-def information_to_expectation(Lambda, J, c=0.):
-    if np.isscalar(Lambda):
-        Sigma = 1. / Lambda
-        mu = -Sigma * J
-    else:
-        Sigma = np.linalg.inv(Lambda)
-        mu = -np.dot(Sigma, J)
-    log_Z = integral_from_information(Lambda, J, c)
-    return Sigma, mu, log_Z
+    mu = np.zeros((ndim, ntime))
+    sigma_sq = np.zeros((ndim, ntime))
 
-def expectation_to_information(Sigma, mu, log_Z=0.):
-    if np.isscalar(Sigma):
-        Lambda = 1. / Sigma
-        J = -Lambda * mu
-        c = -log_Z + 0.5 * np.log(2 * np.pi * Sigma) + 0.5 * mu**2 * Lambda
-    else:
-        Lambda = np.linalg.inv(Sigma)
-        J = -np.dot(Lambda, mu)
-        d, Q = np.linalg.eigh(Sigma)
-        c = -log_Z + 0.5 * np.sum(np.log(2 * np.pi * d)) + 0.5 * np.dot(np.dot(mu, Lambda), mu)
-    return Lambda, J, c
-
-
-def kalman_filter(mu_0, Sigma_0, A, mu_v, Sigma_v, B, Lambda_n, y):
-    nlat = mu_0.size
-    nvis, ntime = y.shape
-
-    assert np.allclose(mu_v, 0.)
-    
-    mu_forward = np.zeros((nlat, ntime))
-    Sigma_forward = np.zeros((nlat, nlat, ntime))
-    mu = np.zeros((nlat, ntime))
-    Sigma = np.zeros((nlat, nlat, ntime))
-    mu_forward[:,0] = mu_0
-    Sigma_forward[:,:,0] = Sigma_0
-    
     # forward propagation
     for t in range(ntime):
         # execute dynamics
         if t > 0:
-            mu_forward[:,t] = np.dot(A, mu[:,t-1]) + mu_v
-            Sigma_forward[:,:,t] = np.dot(np.dot(A, Sigma[:,:,t-1]), A.T) + Sigma_v
+            mu_forward[:, t] = a * mu[:, t-1]
+            sigma_sq_forward[:, t] = a**2 * sigma_sq[:, t-1] + sigma_sq_v
 
         # account for observations
-        Lambda, J, _ = expectation_to_information(Sigma_forward[:,:,t], mu_forward[:,t])
-        Lambda += np.dot(np.dot(B.T, Lambda_n[:,:,t]), B)
-        J -= np.dot(B.T, np.dot(Lambda_n[:,:,t], y[:,t]))
-        Sigma[:,:,t], mu[:,t], _ = information_to_expectation(Lambda, J)
+        lambda_post = 1. / sigma_sq_forward[:, t] + b**2 * lam[:, t]
+        h_post = mu_forward[:, t] / sigma_sq_forward[:, t] + \
+                 b * y[:, t] * lam[:, t]
+        mu[:, t] = h_post / lambda_post
+        sigma_sq[:, t] = 1. / lambda_post
 
-    J_backward = np.zeros((nlat, ntime))
-    Lambda_backward = np.zeros((nlat, nlat, ntime))
+    h_backward = np.zeros((ndim, ntime))
+    lambda_backward = np.zeros((ndim, ntime))
 
-
-    # backward propagation
+    # backward_propagation
     for t in range(ntime-1)[::-1]:
-        Lambda_obs = np.dot(np.dot(B.T, Lambda_n[:,:,t]), B)
-        Lambda_prime = Lambda_backward[:,:,t+1] + Lambda_obs
-        J_prime = -np.dot(B.T, np.dot(Lambda_n[:,:,t], y[:,t])) + J_backward[:,t+1]
-        mu_prime = -np.linalg.lstsq(Lambda_prime, J_prime)[0]
+        lambda_post = lambda_backward[:, t+1] + b**2 * lam[:, t+1]
+        h_post = h_backward[:, t+1] + b * lam[:, t+1] * y[:, t+1]
 
-        Lambda_prime = combine_precisions(Sigma_v, Lambda_prime)
-
-        Lambda_backward[:,:,t] = np.dot(np.dot(A.T, Lambda_prime), A)
-        mu_backward = np.linalg.lstsq(A, mu_prime)[0]
-        J_backward[:,t] = -np.dot(Lambda_backward[:,:,t], mu_backward)
-
+        lambda_backward[:, t] = a**2 / (sigma_sq_v + 1. / lambda_post)
+        h_backward[:, t] = a * h_post /  (sigma_sq_v * lambda_post + 1.)
+        
     # combine both directions
-    for t in range(ntime):
-        Lambda, J, _ = expectation_to_information(Sigma[:,:,t], mu[:,t])
-        J += J_backward[:,t]
-        Lambda += Lambda_backward[:,:,t]
-        Sigma[:,:,t], mu[:,t], _ = information_to_expectation(Lambda, J)
+    lambda_forward = 1. / sigma_sq_forward
+    h_forward = mu_forward / sigma_sq_forward
+    lambda_post = lambda_forward + lambda_backward + b**2 * lam
+    h_post = h_forward + h_backward + b * lam * y
+    sigma_sq_post = 1. / lambda_post
+    mu_post = h_post / lambda_post
 
+    assert np.all(np.isfinite(mu_post))
+
+    return mu_post, sigma_sq_post
+
+def kalman_filter_codiag(mu_0, sigma_sq_0, sigma_sq_v, Lambda, y, mask):
+    assert np.isscalar(sigma_sq_0) and np.isscalar(sigma_sq_v)
+    ndim, ntime = y.shape
+    d, Q = scipy.linalg.eigh(Lambda)
+    mu_0_proj = np.dot(Q.T, mu_0)
+    y_proj = np.dot(Q.T, y)
+    lam = d[:, nax] * mask[nax, :]
+    mu_post_proj, sigma_sq_post_proj = kalman_filter_diag(
+        mu_0_proj, sigma_sq_0, sigma_sq_v, lam, y_proj)
+    mu_post = np.dot(Q, mu_post_proj)
+    Sigma_post = np.array([np.dot(Q, np.dot(np.diag(sigma_sq_post_proj[:, t]), Q.T))
+                           for t in range(ntime)]).T
+    return mu_post, Sigma_post
+
+def kalman_filter_codiag2(mu_0, Sigma_v, Lambda, y, mask):
+    ndim, ntime = y.shape
+    d, Q = scipy.linalg.eigh(Sigma_v)
+    idxs = np.where(d > 1e-6)[0]
+    d, Q = d[idxs], Q[:, idxs]
+    sqrt_d = d ** 0.5
+    S = np.dot(Q, np.diag(sqrt_d))
+
+    mu_0_trans = np.dot(Q.T, mu_0) / sqrt_d
+    Lambda_trans = np.dot(S.T, np.dot(Lambda, S))
+    y_trans = np.dot(Q.T, y) / sqrt_d[:, nax]
+    mu_trans, Sigma_trans = kalman_filter_codiag(mu_0_trans, 1e5, 1., Lambda_trans, y_trans, mask)
+    mu = np.dot(S, mu_trans)
+    Sigma = np.array([np.dot(S, np.dot(Sigma_trans[:, :, t], S.T))
+                      for t in range(ntime)]).T
     return mu, Sigma
-
+    
 
     
 def logdet(A):

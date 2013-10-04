@@ -246,23 +246,20 @@ def compute_gaussian_part(training_data_matrix, root, N):
     X = training_data_matrix.sample_latent_values(root.predictions(), root.children[-1].sigma_sq)
 
     mu_0 = np.zeros(D)
-    Sigma_0 = 1000. * np.eye(D)
-    A = np.eye(D)
-    mu_v = chain_term.mu_delta
     Sigma_v = chain_term.Sigma_delta
-    B = np.eye(D)
 
-    Lambda_n = np.zeros((D, D, N))
     y = np.zeros((D, N))
-    Lambda = np.linalg.inv(gaussian_term.Sigma)
     for i, row in enumerate(training_data_matrix.row_ids):
-        Lambda_n[:, :, row] = Lambda
         if fixed_term is not None:
             y[:, row] = X[i, :] - gaussian_term.mu - fixed_term.values[i, :]
         else:
             y[:, row] = X[i, :] - gaussian_term.mu
 
-    mu_chains, Sigma_chains = misc.kalman_filter(mu_0, Sigma_0, A, mu_v, Sigma_v, B, Lambda_n, y)
+    mask = np.zeros(N, dtype=bool)
+    mask[training_data_matrix.row_ids] = True
+
+    mu_chains, Sigma_chains = misc.kalman_filter_codiag2(
+        mu_0, Sigma_v, np.linalg.inv(gaussian_term.Sigma), y, mask)
     mu_total = mu_chains.T + gaussian_term.mu[nax, :]
     Sigma_total = np.zeros((N, D, D))
     for i in range(N):
