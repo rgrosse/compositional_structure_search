@@ -58,7 +58,7 @@ def escape(job):
                      for arg in job])
 
 def run_command(command, jobs, machines=None, chdir=None):
-    args = ['parallel']
+    args = ['parallel', '--gnu']
     if machines is not None:
         for m in machines:
             args += ['--sshlogin', m]
